@@ -149,79 +149,102 @@ def save_file_menu():
 
     """
 
+    returnToPrimarySaveMenu = True
+    OVERWRITE_OPTIONS = []
     SAVE_MENU_OPTIONS = ["save the current state as a brand new budget,",
                          "save the current state by overwriting an existing budget,",
                          "cancel this save and return to the main menu."
                          ]
 
     print("\n~~Time to save your budget data!~~")
-    choice = reciteMenuOptions(SAVE_MENU_OPTIONS)
 
-    if choice == 1:
-        print("\nThe current working directory is:\n\t%s" % os.getcwd())
-        choice2 = input("Would you like to save your budget here (Y) or elsewhere (N)? ").upper()
-        #Need to confirm that choice2 is a member of {Y, y, N, n}
-
-        if choice2 == 'Y':
-            print("\nCool, it\'ll be saved to the current working directory.")
-            dirname = input("Please choose a name for your budget directory: ")
-            #How to verify that user has entered a valid filename? Can't contain '/' or ':' (I think)
-            #Use a Try...Except block here, rather than anticipating all possible user errors.
-
-            #Verify whether there is an existing directory with the same name and path
-            #if os.path.isfile(os.path.join(os.getcwd(), filename)) == True:
-            if os.path.isdir(os.path.join(os.getcwd(), dirname)) == True:
-                
-                print("\nUmmmmm that directory already exists. Awko Taco!")
-                choice3 = input("Do you want to overwrite it (Y) or pick a new directory/filename (N)? ").upper()
-                #Again, need to confirm that choice3 is a member of {Y, y, N, n}
-
-                if choice3 == 'Y':
-                    the_actual_file_saving_code(os.getcwd(), dirname)
-
-                elif choice3 == 'N':
-                    #Loop back and ask user to enter specifications again, including the directory.
-                    #The top of the loop should be inside the "choice == 1" block
-                    pass
-
-            else:
-                the_actual_file_saving_code(os.getcwd(), dirname)
- 
-
-        elif choice2 == 'N':
-            #Ask the user what directory he wants to save it to.
-            #Once a directory has been selected, then prompt for the budget directory name (consider making this part its own function).
-            pass
+    #Loop back up to here.
+    while returnToPrimarySaveMenu == True:
+        returnToPrimarySaveMenu = False
         
+        choice = reciteMenuOptions(SAVE_MENU_OPTIONS)
 
-    elif choice == 2:
-        #Need to present the user with a list of existing budget directories.
-        #Start by presenting all .txt files in the CWD and ask if the desired file is there.
-        #If so, then confirm that the user wants to save over that file. If so, then save over it!
-        #If not, then ask the user to enter the directory that contains the file he has in mind.
-        #Present all .txt files in this new directory and ask if the desired file is there.
-        #Loop as necessary until the user chooses a file.
-        #Also, provide the user with a CANCEL option at all times, should he decide that he doesn't want to
-        pass
+        if choice == 1:
+            print("\nThe current working directory is:\n\t%s" % os.getcwd())
+            choice2 = input("Would you like to save your budget here (Y) or elsewhere (N)? ").upper()
+            #Need to confirm that choice2 is a member of {Y, y, N, n}
 
-    elif choice == 3:
-        #This part is finished!
-        pass
+            if choice2 == 'Y':
+                print("\nCool, it\'ll be saved to the current working directory.")
+                dirname = input("Please choose a name for your budget directory: ")
+                #How to verify that user has entered a valid filename? Can't contain '/' or ':' (I think)
+                #Use a Try...Except block here, rather than anticipating all possible user errors.
+
+                #Verify whether there is an existing directory with the same name and path
+                if os.path.isdir(os.path.join(os.getcwd(), dirname)) == True:
+                    
+                    print("\nUmmmmm that directory already exists. Awko Taco!")
+                    choice3 = input("Do you want to overwrite it (Y) or pick a new location/name (N)? ").upper()
+                    #Again, need to confirm that choice3 is a member of {Y, y, N, n}
+
+                    if choice3 == 'Y':
+                        the_actual_file_saving_code(os.path.join(os.getcwd(), dirname))
+
+                    elif choice3 == 'N':
+                        returnToPrimarySaveMenu = True
+
+                else:
+                    the_actual_file_saving_code(os.path.join(os.getcwd(), dirname))
+     
+            elif choice2 == 'N':
+                #Ask the user what directory he wants to save it to.
+                #Once a directory has been selected, then prompt for the budget directory name (consider making this part its own function).
+                pass
+            
+
+
+
+        elif choice == 2:
+            #Present the user with the list of budgets (from the INITIALIZE.txt file)
+            #Also provide an option to cancel this decision
+
+            existingBudgets = readExistingBudgetsIntoPresentableList()
+
+            if existingBudgets == None:
+                returnToPrimarySaveMenu = True
+            else:
+                print("\nWhich budget would you like to save over?")
+                OVERWRITE_OPTIONS.clear()
+                for i in range(len(existingBudgets)):
+                    OVERWRITE_OPTIONS.append("save over %s," % existingBudgets[i])
+                OVERWRITE_OPTIONS.append("cancel this decision and return to the save menu.")
+                
+                choice4 = reciteMenuOptions(OVERWRITE_OPTIONS)
+
+                #Since the cancel option is last, its number will be equal to the length of OVERWRITE_OPTIONS.
+                if choice4 == len(OVERWRITE_OPTIONS):
+                    #redirect the user to the top of this function
+                    returnToPrimarySaveMenu = True
+                else:
+                    #We want to go to the selected budget directory and replace the old contents with the current state.
+                    #This means deleting the old budget directory, and then saving to that same location.
+                    #There will be no need to make any change to INITIALIZE.txt
+                    the_actual_file_saving_code(existingBudgets[choice4 - 1])
+
+        elif choice == 3:
+            #No additional code needed here!
+            pass
 
 #__________________________________________________________________________________________________#
-def the_actual_file_saving_code(path, directory_name):
-    
-    full_path_and_directory_name = os.path.join(path, directory_name)
+def the_actual_file_saving_code(full_path_and_directory_name):
 
-    #Save the full path and directory name to our fixed INITIALIZE.TXT file.
-    #NOTE: The path to INITIALIZE.TXT should work for anyone, not just my specific hard-coded path below.
-    with open('/Users/Benjamin/Documents/PythonPrograms/BudgetProject/BudgetRepo/INITIALIZE.TXT', mode = 'a', encoding = 'utf-8') as file1:
-        file1.write("%s\n" % full_path_and_directory_name) 
-
-    #Next create a new directory using the name provided by the user, if necessary
-    os.makedirs(full_path_and_directory_name)
-    #NOTE: IF THIS DIRECTORY ALREADY EXISTS, THE PROGRAM WILL THROW AN EXCEPTION HERE!!!
-    #Probbaly can be quickly solved using a Try...Except block
+    #First create a new directory using the name provided by the user, unless it already exists.
+    try:
+        os.makedirs(full_path_and_directory_name)
+    except FileExistsError:
+        #Directory already exists, no action required.
+        pass
+    else:
+        #This code block only executes when a new directory is successfully created.
+        #Save the full path and directory name to our fixed INITIALIZE.TXT file.
+        #NOTE: The path to INITIALIZE.TXT should work for anyone, not just my specific hard-coded path below.
+        with open('/Users/Benjamin/Documents/PythonPrograms/BudgetProject/BudgetRepo/INITIALIZE.TXT', mode = 'a', encoding = 'utf-8') as file1:
+            file1.write("%s\n" % full_path_and_directory_name) 
 
     #Now save all data to the directory...
     os.chdir(full_path_and_directory_name)
@@ -235,10 +258,6 @@ def the_actual_file_saving_code(path, directory_name):
 def load_file():
     #The user should be asked which budget directory to load from.
     #This means the user needs to be presented with a list of previously-saved budgets.
-
-    #NEW IDEA! When the program first launches, it should pull a list of previously-saved budget names from a text-file at
-    #a previously determined fixed location. This means that every time you save a budget, the full path and the user-created
-    #name will be saved to this fixed text-file.
 
     #Okay so...
     #First,search for pre-existing text file containing budget names and paths
@@ -257,11 +276,46 @@ def load_file():
     #Load categories into my_cateogires!
 
 
+    LOAD_MENU_OPTIONS = []
+        
+    existingBudgets = readExistingBudgetsIntoPresentableList()
+
+    if existingBudgets == None:
+        pass
+    else:
+        print("\n~~Please choose which budget you want to load.~~")
+        #Now make each member of LOAD_MENU_OPTIONS say "load $$$" where $$$ is the user-created name from a previous instance.
+        for i in range(len(existingBudgets)):
+            LOAD_MENU_OPTIONS.append("load %s," % existingBudgets[i])
+        #ADD AN OPTION TO CANCEL THIS DECISION AND RETURN TO THE MAIN MENU
+        LOAD_MENU_OPTIONS.append("cancel this decision and return to the main menu.")
+            
+        choice = reciteMenuOptions(LOAD_MENU_OPTIONS)
+
+        if choice == len(LOAD_MENU_OPTIONS):
+            #redirect user back to the main menu.
+            pass
+        else:
+            my_categories.clear()
+            with open(os.path.join(existingBudgets[choice-1], 'savedCategories.txt'), mode = 'r', encoding = 'utf-8') as f:
+                while True:
+                    temporary2 = f.readline()
+                    if temporary2 == '':
+                        break
+                    else:
+                        my_categories.append(Categories(temporary2.strip(),0))
+            
+            print("\nYour budget has been loaded!")
+
+#__________________________________________________________________________________________________#
+def readExistingBudgetsIntoPresentableList():
+    #All this function does is reads INITIALIZE.txt into a list (line by line), check for empty case, and then clean up names and returns list.
+    #That is, it returns a list called Initialize_contents_display.
+    #If there are no saved budgets, it returns None.
+
     Initialize_contents = []
     #Initialize_contents_display is a list which is identical to Initialize_contents except that it looks presentable.
     Initialize_contents_display = []
-    LOAD_MENU_OPTIONS = []
-    my_categories.clear()
 
     #Read each line from the INITIALIZE.TXT file into the list Initialize_contents
     with open('/Users/Benjamin/Documents/PythonPrograms/BudgetProject/BudgetRepo/INITIALIZE.TXT', mode = 'r', encoding = 'utf-8') as file:
@@ -273,33 +327,17 @@ def load_file():
                 Initialize_contents.append(temporary)
                 
     if len(Initialize_contents) == 0:
-        print("\nThere doesn't appear to be any existing budgets...Why don't you make one?")
+        print("\nThere doesn't appear to be any existing budgets.")
         #At this point we want to immediately return to the main menu!
+        return None
         
     else:
-        print("\n~~You need to choose which budget you want to load.~~")
-
         #Now remove the newline characters (\n) from the end of each member of Initialize_contents
         #???Also remove the path (except for the final directory, which the user created in a previous instance.???
         for j in range(len(Initialize_contents)):
             Initialize_contents_display.append(Initialize_contents[j].strip())
-        
-        #Now make each member of LOAD_MENU_OPTIONS say "load $$$" where $$$ is the user-created name from a previous instance.
-        for i in range(len(Initialize_contents_display)):
-            LOAD_MENU_OPTIONS.append("load %s," % Initialize_contents_display[i])
-            
-        choice = reciteMenuOptions(LOAD_MENU_OPTIONS)           
-            
-        with open(os.path.join(Initialize_contents_display[choice-1], 'savedCategories.txt'), mode = 'r', encoding = 'utf-8') as f:
-            while True:
-                temporary2 = f.readline()
-                if temporary2 == '':
-                    break
-                else:
-                    my_categories.append(Categories(temporary2.strip(),0))
-        
 
-        print("\nYour budget has been loaded!")
+        return Initialize_contents_display
 
 
 
@@ -350,10 +388,8 @@ print("See you later!")
 
 """
 Here are ideas of next steps and features:
--Save the list of budget categories to a text file, and load them the next time the user runs the program.
-    -Add a Save option and a Load option to the main menu?
-    -I think that any saved data for a single budget should be packaged in a single directory.
-        -Within that directory there can be separate text files: one for categories, one for transactions, etc.
+-Currently there is nothing stopping a user from saving a new budget within an existing budget's directory.
+    -Ideally we would not want to allow this!
 -Add a Delete Existing Budget option to the main menu.
 -Implement some sense of time. Consider making the time frame variable, based on user input.
 -Expand the display_categories() function to show more than just the category names. Ideas for expansion include:
