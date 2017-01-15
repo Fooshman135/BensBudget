@@ -83,14 +83,14 @@ def reciteMenuOptions(listOfOptions):
         try:
             userInput = int(input("Enter your choice here: "))
         except ValueError:
-            print("\nInvalid entry, please try agin.")
+            print("\nInvalid entry, please try again.")
         else:
             #Now that we've successfully converted the input into an int type, make sure it is in the right range.
             #That is, make sure it is in the set {i+1} for i in range(len(listOfOptions))
             if userInput in range(1,len(listOfOptions)+1):
                 break
             else:
-                print("\nInvalid entry, please try agin.")
+                print("\nInvalid entry, please try again.")
 
     #The input is valid, so we can return it now.
     return userInput
@@ -357,7 +357,7 @@ def user_input_with_error_check_valid(promptMessage, validSet, upperOnly):
         if user_input in validSet:
             break
         else:
-            print("\nInvalid entry, please try agin.\n")
+            print("\nInvalid entry, please try again.\n")
 
     return user_input
 
@@ -384,7 +384,7 @@ def user_input_with_error_check_invalid(promptMessage, invalidTuple, specificLoc
                 if invalidTuple[i] in user_input:
                     #Break out of for loop, print error message, loop back up to top of while loop
                     badInput = True
-                    print("\nInvalid entry, please try agin.\n")
+                    print("\nInvalid entry, please try again.\n")
                     break
 
             else:
@@ -392,12 +392,25 @@ def user_input_with_error_check_invalid(promptMessage, invalidTuple, specificLoc
                 if invalidTuple[i] in user_input[specificLocation[i]]:
                     #Break out of for loop, print error message, loop back up to top of while loop
                     badInput = True
-                    print("\nInvalid entry, please try agin.\n")
+                    print("\nInvalid entry, please try again.\n")
                     break
 
     return user_input
 
-    
+
+#__________________________________________________________________________________________________#
+def configuration():
+    """
+    This function should be called when the program first begins.
+    If this is the first time the program is opened on this computer,
+    then this function should create a configuration file at a new
+    directory off the home path. This configuration file will be like
+    INITIALIZE.TXT, and will be updated every time the user saves his
+    budget, as well as whenever the user makes changes to his preferences.
+    If this is not the first time, then the directory should already
+    exist, and the program should see that and skip this step.
+    """
+
     
 ######################################   START OF PROGRAM   ########################################
 
@@ -445,6 +458,10 @@ print("See you later!")
 
 """
 Here are ideas of next steps and features:
+-REGARDING SAVING BUDGETS:
+    -Like YNAB, this program should not allow the user to choose what directory to save their budget to.
+    -Rather, it should merely ask whether its a brand new budget or saving over an old one,
+        and then it should just save.
 -Currently there is nothing stopping a user from saving a new budget within an existing budget's directory.
     -Ideally we would not want to allow this!
 -Add a Delete Existing Budget option to the main menu.
@@ -464,5 +481,15 @@ Here are ideas of next steps and features:
 -Python does not have a switch statement, so the current use of if/elif/else will have to do.
 -Allow users to create their own subsets of categories (distinct from the idea of supercategories).
     -Allow users to see spending patterns/trends in just that subset.
+
+Discussion with Dad on 11/26/16:
+-Use sqlite3 to build out databases for Categories and Transactions (rather than use Classes).
+    import sqlite3    (already installed on my computer).
+-Implement config files
+    config files save user preferences ("configurations")
+    Module: configparser
+
+    ...or, just create a hiden directory at the home directory (use os.environ['HOME']).
+    
 
 """

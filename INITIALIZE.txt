@@ -1,0 +1,2 @@
+/Users/Benjamin/Documents/PythonPrograms/BudgetProject/BudgetRepo/PaulsBudget
+/Users/Benjamin/Documents/PythonPrograms/BudgetProject/BudgetRepo/Ilan's budget category
