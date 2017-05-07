@@ -1,5 +1,5 @@
 # Ignore python virtual environment
 env
 
-#Ignore sample data
-sample_data
+# Ignore hidden folder added by PyCharm
+.idea

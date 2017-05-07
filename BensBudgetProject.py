@@ -1,10 +1,12 @@
+#!/usr/bin/env python
+
 """
 This is my first attempt at a full Python program. The purpose of this program is to:
 (1) learn how to code hands-on with Python,
 (2) have a project that I can use to demonstrate my abilities,
 (3) possibly practice incorporating machine learning principles.
 
-This program will be a budgeting program, inspired by YNAB. It's componants shall include:
+This program will be a budgeting program, inspired by YNAB. It's components shall include:
 (1) A list of budget categories (and subcategories), created by the user
 (2) A way to add/delete/edit budget categories
 (3) A list of transactions, entered by the user
@@ -27,51 +29,59 @@ Let's dive in and see what happens!
 """
 
 #__________________________________________________________________________________________________#
-#I guess we need to make categories themselves into a data structure. Let's use a class.
-
-class Categories(object):
-    def __init__(self, name, budget_value):
-        self.name = name
-        self.budget_value = budget_value
-
-
-#__________________________________________________________________________________________________#
-#Next, the transactions. This should also probably be a class.
-
-class Transactions(object):
-    def __init__(self, date, payee, category, memo, amount):
-        self.date = date
-        self.payee = payee
-        self.category = category
-        self.memo = memo
-        self.amount = amount
-
-#__________________________________________________________________________________________________#
 def display_categories():
 
-    if len(my_categories) == 0:
-        print("\nYou have no categories! You should make some!")
-    else:
-        print("Here are your categories:")
+    # SQL command to query the Categories table, showing only the name attribute.
+    cur = conn.cursor()
+    cur.execute("SELECT name FROM Categories")
+    num_categories = 0
+    while True:
+        try:
+            next_category = cur.fetchone()[0]
+        except TypeError:   # cur.fetchone() returns None at the end of the query, which is non-subscriptable.
+            if num_categories == 0:
+                print("\nYou have no categories! You should make some!")
+            break
+        else:
+            if num_categories == 0:
+                print("\nHere are your categories:")
+            print("\t", next_category)
+            num_categories += 1
 
-        for i in range(len(my_categories)):
-            print("\t%s" % my_categories[i].name)
+    cur.close()
 
 #__________________________________________________________________________________________________#
 def new_category():
-    #This function is called whenever the user wants to create a new budget category.
-    #First, ask the user what the category's name should be.
-    name = input("What do you want to call your new category? ")
-    #Note: I was unable to find a category name that raised an exception, so there is no error-checking here!
 
-    print("Okay! You added a new category called %s to your list!" % name)
-    
-    #Then, create an instance of Category class and assign the name as an attribute.
-    #Return this instance.
-    return Categories(name, 0)
+    # This function is called whenever the user wants to create a new budget category.
+    # First, ask the user what the category's name should be.
+    cur = conn.cursor()
+
+    while True:
+        name = input("\nWhat do you want to call your new category? ").strip()
+        # Note: I was unable to find a category name that raised an exception, so there is no error-checking here!
+        if name == '':
+            print("\nInvalid entry, please try again.\n")
+            continue
+        cur.execute("SELECT name FROM Categories WHERE name=?", (name,))
+        check = cur.fetchall()
+        if not check:
+            # The name which the user entered is not already in the Categories table.
+            break
+        else:
+            print("\nA category already exists with that name. Please choose a different name.\n")
+            continue
+
+    # Now add this category to the category table in the .db file.
+    cur.execute('INSERT INTO Categories VALUES(?,0)', (name,))
+    cur.close()
+    conn.commit()
+
+    print("\nOkay! You added a new category called %s to your list!" % name)
 
 #__________________________________________________________________________________________________#
 def reciteMenuOptions(listOfOptions):
+    # TODO: This function should call the user_input_with_error_check_valid() function.
 
     while True:
 
@@ -81,19 +91,19 @@ def reciteMenuOptions(listOfOptions):
             print("Press %d to %s" % (i+1, listOfOptions[i]))
 
         try:
-            userInput = int(input("Enter your choice here: "))
+            user_input = int(input("Enter your choice here: "))
         except ValueError:
             print("\nInvalid entry, please try again.")
         else:
-            #Now that we've successfully converted the input into an int type, make sure it is in the right range.
-            #That is, make sure it is in the set {i+1} for i in range(len(listOfOptions))
-            if userInput in range(1,len(listOfOptions)+1):
+            # Now that we've successfully converted the input into an int type, make sure it is in the right range.
+            # That is, make sure it is in the set {i+1} for i in range(len(listOfOptions))
+            if user_input in range(1,len(listOfOptions)+1):
                 break
             else:
                 print("\nInvalid entry, please try again.")
 
-    #The input is valid, so we can return it now.
-    return userInput
+    # The input is valid, so we can return it now.
+    return user_input
 
 #__________________________________________________________________________________________________#
 def menu_for_categories():
@@ -113,7 +123,8 @@ def menu_for_categories():
             display_categories()
     
         elif choice == 2:
-            my_categories.append(new_category())
+            #my_categories.append(new_category())
+            new_category()
     
         elif choice == 3:
             break
@@ -121,238 +132,30 @@ def menu_for_categories():
 #__________________________________________________________________________________________________#
 def menu_for_transactions():
     pass
-
-
-
+    # TODO: date, payee, category, memo, amount
 
 
 
 #__________________________________________________________________________________________________#
-def save_file_menu():
-    
-
-    """
-    What should the flowchart look like here? As a user, what do I want to have happen here?
-    1) Be given a choice to either save in a brand new budget (case 1), or to save over an existing budget (case 2)
-    2) In the first case, the user must enter the budget directory name
-        -The user should be told the current working directory and see the full path
-        -The user should be able to change the directory
-    3) In the second case, the user needs to see a list of existing budgets
-    4) Either way, once the file and path have been selected, do the actual file saving
-        -In case 1, create a new file and save all data to it
-        -In case 2, overwrite an existing file and then save current data to it
-    5) Inform the user that the save was successful
-    6) Return the user back to the main menu
-
-
-    """
-
-    returnToPrimarySaveMenu = True
-    OVERWRITE_OPTIONS = []
-    SAVE_MENU_OPTIONS = ["save the current state as a brand new budget,",
-                         "save the current state by overwriting an existing budget,",
-                         "cancel this save and return to the main menu."
-                         ]
-
-    print("\n~~Time to save your budget data!~~")
-
-    #Loop back up to here.
-    while returnToPrimarySaveMenu == True:
-        returnToPrimarySaveMenu = False
-        
-        choice = reciteMenuOptions(SAVE_MENU_OPTIONS)
-
-        if choice == 1:
-            print("\nThe current working directory is:\n\t%s" % os.getcwd())
-            choice2 = user_input_with_error_check_valid("Would you like to save your budget here (Y) or elsewhere (N)? ", {'Y', 'N'}, True)
-
-            if choice2 == 'Y':
-                print("\nCool, it\'ll be saved to the current working directory.")
-                #OS X directory naming criteria: Can't contain ':' and can't begin with '.'
-                dirname = user_input_with_error_check_invalid("Please choose a name for your budget directory: ", ('.', ':'), (0, None))
-                #dirname also cannot be longer than 255 characters in length, but no error control is included for that here.
-
-                #Verify whether there is an existing directory with the same name and path
-                if os.path.isdir(os.path.join(os.getcwd(), dirname)) == True:
-                    
-                    print("\nIt looks like that budget directory already exists.")
-                    choice3 = user_input_with_error_check_valid("Do you want to overwrite it (Y) or pick a new location/name (N)? ", {'Y', 'N'}, True)
-
-                    if choice3 == 'Y':
-                        the_actual_file_saving_code(os.path.join(os.getcwd(), dirname))
-
-                    elif choice3 == 'N':
-                        returnToPrimarySaveMenu = True
-
-                else:
-                    the_actual_file_saving_code(os.path.join(os.getcwd(), dirname))
-     
-            elif choice2 == 'N':
-                #Ask the user what directory he wants to save it to.
-                #Once a directory has been selected, then prompt for the budget directory name (consider making this part its own function).
-                pass
-
-
-
-
-
-
-            
-        elif choice == 2:
-            #Present the user with the list of budgets (from the INITIALIZE.txt file)
-            #Also provide an option to cancel this decision
-
-            existingBudgets = readExistingBudgetsIntoPresentableList()
-
-            if existingBudgets == None:
-                returnToPrimarySaveMenu = True
-            else:
-                print("\nWhich budget would you like to save over?")
-                OVERWRITE_OPTIONS.clear()
-                for i in range(len(existingBudgets)):
-                    OVERWRITE_OPTIONS.append("save over %s," % existingBudgets[i])
-                OVERWRITE_OPTIONS.append("cancel this decision and return to the save menu.")
-                
-                choice4 = reciteMenuOptions(OVERWRITE_OPTIONS)
-
-                #Since the cancel option is last, its number will be equal to the length of OVERWRITE_OPTIONS.
-                if choice4 == len(OVERWRITE_OPTIONS):
-                    #redirect the user to the top of this function
-                    returnToPrimarySaveMenu = True
-                else:
-                    #We want to go to the selected budget directory and replace the old contents with the current state.
-                    #This means deleting the old budget directory, and then saving to that same location.
-                    #There will be no need to make any change to INITIALIZE.txt
-                    the_actual_file_saving_code(existingBudgets[choice4 - 1])
-
-        elif choice == 3:
-            #No additional code needed here!
-            pass
-
-#__________________________________________________________________________________________________#
-def the_actual_file_saving_code(full_path_and_directory_name):
-
-    #First create a new directory using the name provided by the user, unless it already exists.
-    try:
-        os.makedirs(full_path_and_directory_name)
-    except FileExistsError:
-        #Directory already exists, no action required.
-        pass
-    else:
-        #This code block only executes when a new directory is successfully created.
-        #Save the full path and directory name to our fixed INITIALIZE.TXT file.
-        #NOTE: The path to INITIALIZE.TXT should work for anyone, not just my specific hard-coded path below.
-        with open('/Users/Benjamin/Documents/PythonPrograms/BudgetProject/BudgetRepo/INITIALIZE.TXT', mode = 'a', encoding = 'utf-8') as file1:
-            file1.write("%s\n" % full_path_and_directory_name) 
-
-    #Now save all data to the directory...
-    old_cwd = os.getcwd()
-    os.chdir(full_path_and_directory_name)
-    with open('savedCategories.txt', mode = 'w', encoding = 'utf-8') as file2:
-        for cat in my_categories:
-            file2.write("%s\n" % cat.name)
-
-    os.chdir(old_cwd)
-
-    print("\nOkay! Your budget data has been saved to:\n\t%s" % full_path_and_directory_name)
-
-#__________________________________________________________________________________________________#
-def load_file():
-    #The user should be asked which budget directory to load from.
-    #This means the user needs to be presented with a list of previously-saved budgets.
-
-    #Okay so...
-    #First,search for pre-existing text file containing budget names and paths
-    #Then read the names to the user.
-    #When the user selects a name, navigate to the path
-    #At the end of the path will be a budget folder containing two text files (categories and transactions)
-    #Then the program should load both the budget categories and transactions.
-    
-    #Open INITIALIZE.TXT in read mode
-    #Use a for loop to save each line of the file into a list.
-    #WE CAN'T USE os.path.split to grab the directory name because it only works for file names at the end of the path!
-    #Enter these directory names into LOAD_MENU_OPTIONS
-    #Use as argument for reciteMenuOptions()
-    #Based on the user's choice, navigate to the appropriate budget directory
-    #Load categories into my_cateogires!
-
-
-    LOAD_MENU_OPTIONS = []
-        
-    existingBudgets = readExistingBudgetsIntoPresentableList()
-
-    if existingBudgets == None:
-        pass
-    else:
-        print("\n~~Please choose which budget you want to load.~~")
-        #Now make each member of LOAD_MENU_OPTIONS say "load $$$" where $$$ is the user-created name from a previous instance.
-        for i in range(len(existingBudgets)):
-            LOAD_MENU_OPTIONS.append("load %s," % existingBudgets[i])
-        #ADD AN OPTION TO CANCEL THIS DECISION AND RETURN TO THE MAIN MENU
-        LOAD_MENU_OPTIONS.append("cancel this decision and return to the main menu.")
-            
-        choice = reciteMenuOptions(LOAD_MENU_OPTIONS)
-
-        if choice == len(LOAD_MENU_OPTIONS):
-            #redirect user back to the main menu.
-            pass
-        else:
-            my_categories.clear()
-            with open(os.path.join(existingBudgets[choice-1], 'savedCategories.txt'), mode = 'r', encoding = 'utf-8') as f:
-                while True:
-                    temporary2 = f.readline()
-                    if temporary2 == '':
-                        break
-                    else:
-                        my_categories.append(Categories(temporary2.strip(),0))
-            
-            print("\nYour budget has been loaded!")
-
-#__________________________________________________________________________________________________#
-def readExistingBudgetsIntoPresentableList():
-    #All this function does is reads INITIALIZE.txt into a list (line by line), check for empty case, and then clean up names and returns list.
-    #That is, it returns a list called Initialize_contents_display.
-    #If there are no saved budgets, it returns None.
-
-    Initialize_contents = []
-    #Initialize_contents_display is a list which is identical to Initialize_contents except that it looks presentable.
-    Initialize_contents_display = []
-
-    #Read each line from the INITIALIZE.TXT file into the list Initialize_contents
-    with open('/Users/Benjamin/Documents/PythonPrograms/BudgetProject/BudgetRepo/INITIALIZE.TXT', mode = 'r', encoding = 'utf-8') as file:
-        while True:
-            temporary = file.readline()
-            if temporary == '':
-                break
-            else:
-                Initialize_contents.append(temporary)
-                
-    if len(Initialize_contents) == 0:
-        print("\nThere doesn't appear to be any existing budgets.")
-        #At this point we want to immediately return to the main menu!
-        return None
-        
-    else:
-        #Now remove the newline characters (\n) from the end of each member of Initialize_contents
-        #???Also remove the path (except for the final directory, which the user created in a previous instance.???
-        for j in range(len(Initialize_contents)):
-            Initialize_contents_display.append(Initialize_contents[j].strip())
-
-        return Initialize_contents_display
-
-#__________________________________________________________________________________________________#
-def user_input_with_error_check_valid(promptMessage, validSet, upperOnly):
-    #This function uses promptMessage inside the input() function to get user input.
-    #Then this function determines whether the user input is in validSet.
-    #If it is, then return the user input.
-    #If it isn't, then print an error message and loop back and prompt the user again.
+def user_input_with_error_check_valid(promptMessage, validSet, upperOnly, integer):
+    # This function uses promptMessage inside the input() function to get user input.
+    # Then this function determines whether the user input is in validSet.
+    # If it is, then return the user input.
+    # If it isn't, then print an error message and loop back and prompt the user again.
 
     while True:
 
-        if upperOnly == True:
+        if upperOnly:
             user_input = input(promptMessage).upper()
         else:
             user_input = input(promptMessage)
+
+        if integer:
+            try:
+                user_input = int(user_input)
+            except ValueError:
+                print("\nInvalid entry, please try again.\n")
+                continue
 
         if user_input in validSet:
             break
@@ -363,26 +166,32 @@ def user_input_with_error_check_valid(promptMessage, validSet, upperOnly):
 
 #__________________________________________________________________________________________________#
 def user_input_with_error_check_invalid(promptMessage, invalidTuple, specificLocation):
-    #This function uses promptMessage inside the input() function to get user input.
-    #Then this function determines whether any of the members within invalidTuple appear in the user input.
-    #Each member of invalidTuple may have a criteria regarding where they can't appear, as detailed in specficLocation.
-    #If none of the members in invalidTuple meet the criteria in specificLocation, then return the user input.
-    #If at least one member meets the criteria, then print an error message and loop back and prompt the user again.
+    # This function uses promptMessage inside the input() function to get user input.
+    # Then this function determines whether any of the members within invalidTuple appear in the user input.
+    # Each member of invalidTuple may have a criteria regarding where they can't appear, as detailed in specficLocation.
+    # If none of the members in invalidTuple meet the criteria in specificLocation, then return the user input.
+    # If at least one member meets the criteria, then print an error message and loop back and prompt the user again.
 
     badInput = True
-    while badInput == True:
+    while badInput:
         
-        #Innocent until proven guilty (for every iteration of the while loop).
+        # Innocent until proven guilty (for every iteration of the while loop).
         badInput = False
 
-        user_input = input(promptMessage)
+        user_input = input(promptMessage).strip()
+
+        # Don't allow the user to enter the empty string (by just hitting Enter).
+        if user_input == '':
+            badInput = True
+            print("\nInvalid entry, please try again.\n")
+            continue
 
         for i in range(len(invalidTuple)):
 
-            if specificLocation[i] == None:
+            if specificLocation[i] is None:
 
                 if invalidTuple[i] in user_input:
-                    #Break out of for loop, print error message, loop back up to top of while loop
+                    # Break out of for loop, print error message, loop back up to top of while loop
                     badInput = True
                     print("\nInvalid entry, please try again.\n")
                     break
@@ -390,7 +199,7 @@ def user_input_with_error_check_invalid(promptMessage, invalidTuple, specificLoc
             else:
 
                 if invalidTuple[i] in user_input[specificLocation[i]]:
-                    #Break out of for loop, print error message, loop back up to top of while loop
+                    # Break out of for loop, print error message, loop back up to top of while loop
                     badInput = True
                     print("\nInvalid entry, please try again.\n")
                     break
@@ -399,71 +208,149 @@ def user_input_with_error_check_invalid(promptMessage, invalidTuple, specificLoc
 
 
 #__________________________________________________________________________________________________#
-def configuration():
-    """
-    This function should be called when the program first begins.
-    If this is the first time the program is opened on this computer,
-    then this function should create a configuration file at a new
-    directory off the home path. This configuration file will be like
-    INITIALIZE.TXT, and will be updated every time the user saves his
-    budget, as well as whenever the user makes changes to his preferences.
-    If this is not the first time, then the directory should already
-    exist, and the program should see that and skip this step.
-    """
+def which_budget():
+    which_budget_menu_options = [
+        "make a new budget,",
+        "load an existing budget,",
+        "quit the program."
+    ]
 
-    
+    while True:
+
+        choice = reciteMenuOptions(which_budget_menu_options)
+
+        if choice == 1:
+            # The user wants to create a brand new budget.
+            # First prompt the user to name the new budget. Also validate their input.
+            while True:
+                budget_name = user_input_with_error_check_invalid(
+                    "\nPlease choose a name for your new budget, or enter 0 to cancel: ", ('.', ':'), (0, None)
+                )
+
+                # Now confirm that there isn't an existing budget that already has that name.
+                if os.path.isfile(os.path.join(user_budgets, budget_name + '.db')):
+                    print("\nA budget already exists with that name. Please enter a different name.")
+                else:
+                    break
+
+            if budget_name == "0":
+                # User wants to cancel. Loop to top of this function.
+                continue
+
+            # Create a new .db file (located in the User_Budgets folder) with that name.
+            conn = sqlite3.connect(os.path.join(user_budgets, budget_name + '.db'))
+
+            # Now create an empty Categories table and an empty Transactions table.
+            cur = conn.cursor()
+
+            cur.execute('CREATE TABLE Categories('
+                      'name TEXT,'
+                      'value REAL)'
+                      )
+
+            cur.close()
+            conn.commit()
+
+            # Then finally go to the main menu.
+            print("\nGreat! You have created a brand new budget called %s." % budget_name)
+            break
+
+
+        if choice == 2:
+            # The user wants to load an existing budget.
+            # First pull up a list of available budgets from the user_budgets folder.
+
+            list_of_budgets = glob.glob("%s/*.db" % user_budgets)
+
+            if len(list_of_budgets) == 0:
+                print("\nThere are no existing budgets. You should make a new one!")
+            else:
+                print("\nWhich budget would you like to load?")
+                for i in range(len(list_of_budgets)):
+                    print("\t%d)" % (i + 1), list_of_budgets[i])    # TODO: exclude full file path as well as .db
+                budget_number = user_input_with_error_check_valid(
+                    "Enter the number in front of the budget you wish to load, or enter 0 to cancel: ",
+                    range(len(list_of_budgets) + 1),
+                    False,
+                    True
+                )
+                if budget_number == 0:
+                    # User wants to cancel. Loop to top of this function.
+                    continue
+                else:
+                    # Load the budget that corresponds to the number the user entered.
+                    conn = sqlite3.connect(list_of_budgets[budget_number - 1])
+                    print("\nBudget loaded: %s" % list_of_budgets[budget_number - 1])
+                    break
+
+        if choice == 3:
+            # Quit the program!
+            exit_program()
+
+    return conn
+
+#__________________________________________________________________________________________________#
+def exit_program():
+    print("\nThanks for using Ben's Budget Program. See you later!")
+    raise SystemExit
+
+
 ######################################   START OF PROGRAM   ########################################
 
-#Here is where I import all modules:
+# Here is where I import all modules:
 import os
+import sqlite3
+import glob
 
-#Here are all the CONSTANTS and Global Variables:
-my_categories = []
 MAIN_MENU_OPTIONS = ["go to the category menu,",
                      "go to the transactions menu,",
-                     "save your current budget,",
-                     "load an existing budget,",
-                     "quit the program."
+                     "choose a different budget or quit the program."
                      ]
-    
 
-#Here is where the user experience begins:
-print("Welcome to my budget program!")
+# All config/installation files will be located here:
+config_directory = os.path.expanduser('~/Library/Application Support/Bens Budget Program')
+# Bash uses ~ to mean the home directory, but Python doesn't know that.
+# That's why we use os.path.expanduser() in the previous command.
+
+if not os.path.exists(config_directory):
+    os.makedirs(config_directory)
+
+user_budgets = os.path.join(config_directory, "User Budgets")
+
+if not os.path.exists(user_budgets):
+    os.makedirs(user_budgets)
+
+# Here is where the user experience begins:
+print("\nWelcome to Ben's Budget Program!")
 
 while True:
 
-    choice = reciteMenuOptions(MAIN_MENU_OPTIONS)
-    
-    if choice == 1:
-        menu_for_categories()
-    
-    elif choice == 2:
-        menu_for_transactions()
+    conn = which_budget()
 
-    elif choice == 3:
-        save_file_menu()
+    while True:
 
-    elif choice == 4:
-        load_file()
-        
-    elif choice == 5:
-        break
-        
-    print("\n~~You are now returning to the main menu.~~")
+        choice = reciteMenuOptions(MAIN_MENU_OPTIONS)
+
+        if choice == 1:
+            menu_for_categories()
+
+        elif choice == 2:
+            menu_for_transactions()
+
+        elif choice == 3:
+            print("\n~~You are now returning to the budget selection menu.~~")
+            conn.close()
+            break
+
+        print("\n~~You are now returning to the main menu.~~")
           
-print("See you later!")
+
 
 #######################################   END OF PROGRAM   #########################################
 
 
 """
 Here are ideas of next steps and features:
--REGARDING SAVING BUDGETS:
-    -Like YNAB, this program should not allow the user to choose what directory to save their budget to.
-    -Rather, it should merely ask whether its a brand new budget or saving over an old one,
-        and then it should just save.
--Currently there is nothing stopping a user from saving a new budget within an existing budget's directory.
-    -Ideally we would not want to allow this!
 -Add a Delete Existing Budget option to the main menu.
 -Add a Delete Category option to the Categories menu.
 -Implement some sense of time. Consider making the time frame variable, based on user input.
@@ -481,15 +368,13 @@ Here are ideas of next steps and features:
 -Python does not have a switch statement, so the current use of if/elif/else will have to do.
 -Allow users to create their own subsets of categories (distinct from the idea of supercategories).
     -Allow users to see spending patterns/trends in just that subset.
+-Use regular expressions to check user input (and make sure it's valid).
 
 Discussion with Dad on 11/26/16:
--Use sqlite3 to build out databases for Categories and Transactions (rather than use Classes).
-    import sqlite3    (already installed on my computer).
 -Implement config files
     config files save user preferences ("configurations")
     Module: configparser
-
-    ...or, just create a hiden directory at the home directory (use os.environ['HOME']).
+    ~/Library/Application Support/Bens Budget Program
     
 
 """
