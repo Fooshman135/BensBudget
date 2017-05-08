@@ -58,13 +58,14 @@ def display_categories():
 
 def new_category():
 
+    # TODO: Provide option for user to cancel this decision and return to previous menu.
+
     # This function is called whenever the user wants to create a new budget category.
     # First, ask the user what the category's name should be.
     cur = conn.cursor()
 
     while True:
         name = input("\nWhat do you want to call your new category? ").strip()
-        # Note: I was unable to find a category name that raised an exception, so there is no error-checking here!
         if name == '':
             print("\nInvalid entry, please try again.\n")
             continue
@@ -108,6 +109,7 @@ def menu_for_categories():
 
     CATEGORY_MENU_OPTIONS = ["see your list of budget categories,",
                              "add a new category,",
+                             "delete an existing category,",
                              "return to the main menu."
                              ]
 
@@ -122,26 +124,204 @@ def menu_for_categories():
     
         elif choice == 2:
             new_category()
-    
+
         elif choice == 3:
+            delete_category()
+
+        elif choice == 4:
             break
+
+# __________________________________________________________________________________________________#
+
+
+def delete_category():
+
+    # TODO: Transfer category value to "unbudgeted total" category.
+    # TODO: Determine how to handle transactions which refer to the deleted category.
+
+    # Present the user with a list of categories and ask which one should be deleted (0 for cancel)
+    # Then delete that category from table.
+    cur = conn.cursor()
+    cur.execute("SELECT name FROM Categories")
+
+    num_categories = 0
+    category_dict = {}
+
+    while True:
+        try:
+            category_dict[num_categories + 1] = cur.fetchone()[0]
+        except TypeError:   # cur.fetchone() returns None at the end of the query, which is non-subscriptable.
+            if num_categories == 0:
+                print("\nYou have no categories! You should make some!")
+            break
+        else:
+            if num_categories == 0:
+                print("\nWhich category do you want to delete?")
+            num_categories += 1
+            print("\t%s)" % num_categories, category_dict[num_categories])
+
+    if num_categories > 0:
+        choice_number = user_input_with_error_check_whitelist(
+            "Enter the number in front of the category you wish to delete, or enter 0 to cancel: ",
+            range(num_categories + 1),
+            False,
+            True
+        )
+
+        if choice_number > 0:
+            cur.execute("DELETE FROM Categories WHERE name=?", (category_dict[choice_number],))
+            conn.commit()
+            print("\nYou have successfully deleted %s from your list of categories." % category_dict[choice_number])
+
+    cur.close()
 
 # __________________________________________________________________________________________________#
 
 
 def menu_for_transactions():
     pass
-    # TODO: date, payee, category, memo, amount
+    # TODO: Build out transactions functions.
 
+# __________________________________________________________________________________________________#
+
+
+def menu_for_accounts():
+
+    ACCOUNT_MENU_OPTIONS = ["see your list of accounts,",
+                             "add a new account,",
+                             "delete an existing account,",
+                             "return to the main menu."
+                             ]
+
+    print("\n~~You are now in the accounts menu.~~")
+
+    while True:
+
+        choice = recite_menu_options(ACCOUNT_MENU_OPTIONS)
+
+        if choice == 1:
+            display_accounts()
+
+        elif choice == 2:
+            new_account()
+
+        elif choice == 3:
+            delete_account()
+
+        elif choice == 4:
+            break
+
+# __________________________________________________________________________________________________#
+
+
+def display_accounts():
+
+    # TODO: Also show account balances. Start by changing the SQL query to be "SELECT * FROM Accounts" and use fetchone()[1].
+
+    # SQL command to query the Categories table, showing only the name attribute.
+    cur = conn.cursor()
+    cur.execute("SELECT name FROM Accounts")
+    num_accounts = 0
+    while True:
+        try:
+            next_account_name = cur.fetchone()[0]
+        except TypeError:  # cur.fetchone() returns None at the end of the query, which is non-subscriptable.
+            if num_accounts == 0:
+                print("\nYou have no accounts! You should add some!")
+            break
+        else:
+            if num_accounts == 0:
+                print("\nHere are your accounts and their balances:")
+            print("\t", next_account_name)
+            num_accounts += 1
+
+    cur.close()
+
+# __________________________________________________________________________________________________#
+
+
+def new_account():
+
+    # TODO: Prompt user to add starting account balance (not just account name).
+    # TODO: Add option for user to cancel this decision and return to previous menu.
+
+    # This function is called whenever the user wants to add an account.
+    # First, ask the user what the account's name should be.
+    cur = conn.cursor()
+
+    while True:
+        name = input("\nWhat do you want to call your new account? ").strip()
+        if name == '':
+            print("\nInvalid entry, please try again.\n")
+            continue
+        cur.execute("SELECT name FROM Accounts WHERE name=?", (name,))
+        check = cur.fetchall()
+        if not check:
+            # The name which the user entered is not already in the Accounts table.
+            break
+        else:
+            print("\nAn account already exists with that name. Please choose a different name.\n")
+            continue
+
+    # Now add this account to the account table in the .db file.
+    cur.execute('INSERT INTO Accounts VALUES(?,0)', (name,))
+    cur.close()
+    conn.commit()
+
+    print("\nOkay! You added a new account called %s to your list!" % name)
+
+# __________________________________________________________________________________________________#
+
+
+def delete_account():
+
+    # TODO: figure out what to do with balance (assuming it's non-zero).
+    # TODO: Determine how to handle transactions which refer to the deleted account.
+
+    # Present the user with a list of accounts and ask which one should be deleted (0 for cancel)
+    # Then delete that account from table.
+    cur = conn.cursor()
+    cur.execute("SELECT name FROM Accounts")
+
+    num_accounts = 0
+    account_dict = {}
+
+    while True:
+        try:
+            account_dict[num_accounts + 1] = cur.fetchone()[0]
+        except TypeError:   # cur.fetchone() returns None at the end of the query, which is non-subscriptable.
+            if num_accounts == 0:
+                print("\nYou have no accounts! You should add some!")
+            break
+        else:
+            if num_accounts == 0:
+                print("\nWhich account do you want to delete?")
+            num_accounts += 1
+            print("\t%s)" % num_accounts, account_dict[num_accounts])
+
+    if num_accounts > 0:
+        choice_number = user_input_with_error_check_whitelist(
+            "Enter the number in front of the account you wish to delete, or enter 0 to cancel: ",
+            range(num_accounts + 1),
+            False,
+            True
+        )
+
+        if choice_number > 0:
+            cur.execute("DELETE FROM Accounts WHERE name=?", (account_dict[choice_number],))
+            conn.commit()
+            print("\nYou have successfully deleted %s from your list of accounts." % account_dict[choice_number])
+
+    cur.close()
 
 # __________________________________________________________________________________________________#
 
 
 def user_input_with_error_check_whitelist(prompt_message, valid_set, upper_only, integer):
-    # This function uses promptMessage inside the input() function to get user input.
-    # Then this function determines whether the user input is in validSet.
-    # If it is, then return the user input.
-    # If it isn't, then print an error message and loop back and prompt the user again.
+    # Display prompt_message to the user and then receive input.
+    # Then determine whether the input is in valid_set.
+    # If it is, return the input.
+    # Otherwise print an error message and loop back to prompt the user again.
 
     while True:
 
@@ -168,11 +348,11 @@ def user_input_with_error_check_whitelist(prompt_message, valid_set, upper_only,
 
 
 def user_input_with_error_check_blacklist(prompt_message, invalid_tuple, specific_location):
-    # This function uses promptMessage inside the input() function to get user input.
-    # Then this function determines whether any of the members within invalidTuple appear in the user input.
-    # Each member of invalidTuple may have a criteria regarding where they can't appear, as detailed in specficLocation.
-    # If none of the members in invalidTuple meet the criteria in specificLocation, then return the user input.
-    # If at least one member meets the criteria, then print an error message and loop back and prompt the user again.
+    # Display prompt_message to the user and then receive input.
+    # Then determine whether any of the members within invalid_tuple appear in the input at the location
+    #   specified by the corresponding member within specific_location.
+    # If none of the members in invalid_tuple meet the criteria in specific_location, return the user input.
+    # If at least one member meets the criteria, print an error message and loop back and prompt the user again.
 
     bad_input = True
     while bad_input:
@@ -245,12 +425,27 @@ def which_budget():
             # Create a new .db file (located in the User_Budgets folder) with that name.
             conn = sqlite3.connect(os.path.join(user_budgets, budget_name + '.db'))
 
-            # Now create an empty Categories table and an empty Transactions table.
+            # Now create an empty tables for categories, transactions, and accounts.
             cur = conn.cursor()
 
             cur.execute('CREATE TABLE Categories('
                         'name TEXT,'
                         'value REAL)'
+                        )
+
+            cur.execute('CREATE TABLE Accounts('
+                        'name TEXT,'
+                        'balance REAL)'
+                        )
+
+            cur.execute('CREATE TABLE Transactions('
+                        'amount REAL,'
+                        'payee TEXT,'
+                        'category TEXT,'
+                        'memo TEXT,'
+                        'account TEXT,'
+                        'date TEXT,'
+                        'UID INTEGER)'
                         )
 
             cur.close()
@@ -309,6 +504,7 @@ import glob
 
 MAIN_MENU_OPTIONS = ["go to the category menu,",
                      "go to the transactions menu,",
+                     "go to the accounts menu,",
                      "choose a different budget or quit the program."
                      ]
 
@@ -343,6 +539,9 @@ while True:
             menu_for_transactions()
 
         elif choice == 3:
+            menu_for_accounts()
+
+        elif choice == 4:
             print("\n~~You are now returning to the budget selection menu.~~")
             conn.close()
             break
