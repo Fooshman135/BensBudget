@@ -12,7 +12,8 @@ This program will be a budgeting program, inspired by YNAB. It's components shal
 (3) A list of transactions, entered by the user
 (4) A way to add/delete/edit transactions
 (5) A summary of weekly/monthly/annual statistics and trends
-(6) Machine learning tool that makes suggestions to the user regarding how they should change their spending habits in order to:
+(6) Machine learning tool that makes suggestions to the user regarding how they should change their spending
+    habits in order to:
     a. Pay down debt
     b. Increase their savings/investment contributions
     c. Anticipate upcoming expenses, using the user's history as the training set
@@ -28,7 +29,9 @@ CLEAN       (The code should be readable, concise, and make sense).
 Let's dive in and see what happens!
 """
 
-#__________________________________________________________________________________________________#
+# __________________________________________________________________________________________________#
+
+
 def display_categories():
 
     # SQL command to query the Categories table, showing only the name attribute.
@@ -50,7 +53,9 @@ def display_categories():
 
     cur.close()
 
-#__________________________________________________________________________________________________#
+# __________________________________________________________________________________________________#
+
+
 def new_category():
 
     # This function is called whenever the user wants to create a new budget category.
@@ -79,33 +84,26 @@ def new_category():
 
     print("\nOkay! You added a new category called %s to your list!" % name)
 
-#__________________________________________________________________________________________________#
-def reciteMenuOptions(listOfOptions):
-    # TODO: This function should call the user_input_with_error_check_valid() function.
+# __________________________________________________________________________________________________#
 
-    while True:
 
-        print("\nWhat would you like to do?")
-        
-        for i in range(len(listOfOptions)):
-            print("Press %d to %s" % (i+1, listOfOptions[i]))
+def recite_menu_options(list_of_options):
 
-        try:
-            user_input = int(input("Enter your choice here: "))
-        except ValueError:
-            print("\nInvalid entry, please try again.")
-        else:
-            # Now that we've successfully converted the input into an int type, make sure it is in the right range.
-            # That is, make sure it is in the set {i+1} for i in range(len(listOfOptions))
-            if user_input in range(1,len(listOfOptions)+1):
-                break
-            else:
-                print("\nInvalid entry, please try again.")
+    print("\nWhat would you like to do?")
 
-    # The input is valid, so we can return it now.
-    return user_input
+    for i in range(len(list_of_options)):
+        print("Press %d to %s" % (i + 1, list_of_options[i]))
 
-#__________________________________________________________________________________________________#
+    return user_input_with_error_check_whitelist(
+        "Enter your choice here: ",
+        range(1, len(list_of_options)+1),
+        False,
+        True
+    )
+
+# __________________________________________________________________________________________________#
+
+
 def menu_for_categories():
 
     CATEGORY_MENU_OPTIONS = ["see your list of budget categories,",
@@ -117,27 +115,29 @@ def menu_for_categories():
 
     while True:
 
-        choice = reciteMenuOptions(CATEGORY_MENU_OPTIONS)
+        choice = recite_menu_options(CATEGORY_MENU_OPTIONS)
 
         if choice == 1:
             display_categories()
     
         elif choice == 2:
-            #my_categories.append(new_category())
             new_category()
     
         elif choice == 3:
             break
 
-#__________________________________________________________________________________________________#
+# __________________________________________________________________________________________________#
+
+
 def menu_for_transactions():
     pass
     # TODO: date, payee, category, memo, amount
 
 
+# __________________________________________________________________________________________________#
 
-#__________________________________________________________________________________________________#
-def user_input_with_error_check_valid(promptMessage, validSet, upperOnly, integer):
+
+def user_input_with_error_check_whitelist(prompt_message, valid_set, upper_only, integer):
     # This function uses promptMessage inside the input() function to get user input.
     # Then this function determines whether the user input is in validSet.
     # If it is, then return the user input.
@@ -145,10 +145,10 @@ def user_input_with_error_check_valid(promptMessage, validSet, upperOnly, intege
 
     while True:
 
-        if upperOnly:
-            user_input = input(promptMessage).upper()
+        if upper_only:
+            user_input = input(prompt_message).upper()
         else:
-            user_input = input(promptMessage)
+            user_input = input(prompt_message)
 
         if integer:
             try:
@@ -157,59 +157,62 @@ def user_input_with_error_check_valid(promptMessage, validSet, upperOnly, intege
                 print("\nInvalid entry, please try again.\n")
                 continue
 
-        if user_input in validSet:
+        if user_input in valid_set:
             break
         else:
             print("\nInvalid entry, please try again.\n")
 
     return user_input
 
-#__________________________________________________________________________________________________#
-def user_input_with_error_check_invalid(promptMessage, invalidTuple, specificLocation):
+# __________________________________________________________________________________________________#
+
+
+def user_input_with_error_check_blacklist(prompt_message, invalid_tuple, specific_location):
     # This function uses promptMessage inside the input() function to get user input.
     # Then this function determines whether any of the members within invalidTuple appear in the user input.
     # Each member of invalidTuple may have a criteria regarding where they can't appear, as detailed in specficLocation.
     # If none of the members in invalidTuple meet the criteria in specificLocation, then return the user input.
     # If at least one member meets the criteria, then print an error message and loop back and prompt the user again.
 
-    badInput = True
-    while badInput:
+    bad_input = True
+    while bad_input:
         
         # Innocent until proven guilty (for every iteration of the while loop).
-        badInput = False
+        bad_input = False
 
-        user_input = input(promptMessage).strip()
+        user_input = input(prompt_message).strip()
 
-        # Don't allow the user to enter the empty string (by just hitting Enter).
+        # Explicitly check for empty string.
         if user_input == '':
-            badInput = True
+            bad_input = True
             print("\nInvalid entry, please try again.\n")
             continue
 
-        for i in range(len(invalidTuple)):
+        for i in range(len(invalid_tuple)):
 
-            if specificLocation[i] is None:
+            if specific_location[i] is None:
 
-                if invalidTuple[i] in user_input:
-                    # Break out of for loop, print error message, loop back up to top of while loop
-                    badInput = True
+                if invalid_tuple[i] in user_input:
+                    # Break out of for loop and go back to top of while loop.
+                    bad_input = True
                     print("\nInvalid entry, please try again.\n")
                     break
 
             else:
 
-                if invalidTuple[i] in user_input[specificLocation[i]]:
-                    # Break out of for loop, print error message, loop back up to top of while loop
-                    badInput = True
+                if invalid_tuple[i] in user_input[specific_location[i]]:
+                    # Break out of for loop and go back to top of while loop.
+                    bad_input = True
                     print("\nInvalid entry, please try again.\n")
                     break
 
     return user_input
 
+# __________________________________________________________________________________________________#
 
-#__________________________________________________________________________________________________#
+
 def which_budget():
-    which_budget_menu_options = [
+    WHICH_BUDGET_MENU_OPTIONS = [
         "make a new budget,",
         "load an existing budget,",
         "quit the program."
@@ -217,14 +220,16 @@ def which_budget():
 
     while True:
 
-        choice = reciteMenuOptions(which_budget_menu_options)
+        choice = recite_menu_options(WHICH_BUDGET_MENU_OPTIONS)
 
         if choice == 1:
             # The user wants to create a brand new budget.
             # First prompt the user to name the new budget. Also validate their input.
             while True:
-                budget_name = user_input_with_error_check_invalid(
-                    "\nPlease choose a name for your new budget, or enter 0 to cancel: ", ('.', ':'), (0, None)
+                budget_name = user_input_with_error_check_blacklist(
+                    "\nPlease choose a name for your new budget, or enter 0 to cancel: ",
+                    ('.', ':', '/'),
+                    (0, None, None)
                 )
 
                 # Now confirm that there isn't an existing budget that already has that name.
@@ -244,9 +249,9 @@ def which_budget():
             cur = conn.cursor()
 
             cur.execute('CREATE TABLE Categories('
-                      'name TEXT,'
-                      'value REAL)'
-                      )
+                        'name TEXT,'
+                        'value REAL)'
+                        )
 
             cur.close()
             conn.commit()
@@ -254,7 +259,6 @@ def which_budget():
             # Then finally go to the main menu.
             print("\nGreat! You have created a brand new budget called %s." % budget_name)
             break
-
 
         if choice == 2:
             # The user wants to load an existing budget.
@@ -267,8 +271,8 @@ def which_budget():
             else:
                 print("\nWhich budget would you like to load?")
                 for i in range(len(list_of_budgets)):
-                    print("\t%d)" % (i + 1), list_of_budgets[i])    # TODO: exclude full file path as well as .db
-                budget_number = user_input_with_error_check_valid(
+                    print("\t%d)" % (i + 1), os.path.splitext(os.path.basename(list_of_budgets[i]))[0])
+                budget_number = user_input_with_error_check_whitelist(
                     "Enter the number in front of the budget you wish to load, or enter 0 to cancel: ",
                     range(len(list_of_budgets) + 1),
                     False,
@@ -280,7 +284,8 @@ def which_budget():
                 else:
                     # Load the budget that corresponds to the number the user entered.
                     conn = sqlite3.connect(list_of_budgets[budget_number - 1])
-                    print("\nBudget loaded: %s" % list_of_budgets[budget_number - 1])
+                    print("\nBudget loaded: %s" % os.path.splitext(
+                        os.path.basename(list_of_budgets[budget_number - 1]))[0])
                     break
 
         if choice == 3:
@@ -289,15 +294,15 @@ def which_budget():
 
     return conn
 
-#__________________________________________________________________________________________________#
+# __________________________________________________________________________________________________#
+
+
 def exit_program():
     print("\nThanks for using Ben's Budget Program. See you later!")
     raise SystemExit
 
+# #####################################   START OF PROGRAM   ########################################
 
-######################################   START OF PROGRAM   ########################################
-
-# Here is where I import all modules:
 import os
 import sqlite3
 import glob
@@ -329,7 +334,7 @@ while True:
 
     while True:
 
-        choice = reciteMenuOptions(MAIN_MENU_OPTIONS)
+        choice = recite_menu_options(MAIN_MENU_OPTIONS)
 
         if choice == 1:
             menu_for_categories()
@@ -343,11 +348,9 @@ while True:
             break
 
         print("\n~~You are now returning to the main menu.~~")
-          
 
 
-#######################################   END OF PROGRAM   #########################################
-
+# ######################################   END OF PROGRAM   #########################################
 
 """
 Here are ideas of next steps and features:
@@ -356,17 +359,17 @@ Here are ideas of next steps and features:
 -Implement some sense of time. Consider making the time frame variable, based on user input.
 -Expand the display_categories() function to show more than just the category names. Ideas for expansion include:
     -Showing a table with category names as rows, and other attributes (such as budget_value) as columns.
-    -Similar to YNAB, show total transctions for the given time period.
+    -Similar to YNAB, show total transactions for the given time period.
 -Build out the transactions section of the program.
 -Consider making a function that prompts the user "Press enter to continue" and doesn't continue until they do.
-    -Call this function everytime they enter some input (after the immediate results of their input is shown to them.
+    -Call this function every time they enter some input (after the immediate results of their input is shown to them.
     -For example:
         -the program prompts them for a menu item,
         -they enter a number,
         -the program tells them what the immediate result of their input is,
         -the program calls this press_enter_to_continue function
 -Python does not have a switch statement, so the current use of if/elif/else will have to do.
--Allow users to create their own subsets of categories (distinct from the idea of supercategories).
+-Allow users to create their own subsets of categories (distinct from the idea of super-categories).
     -Allow users to see spending patterns/trends in just that subset.
 -Use regular expressions to check user input (and make sure it's valid).
 
