@@ -3,3 +3,6 @@ env
 
 # Ignore hidden folder added by PyCharm
 .idea
+
+# Ignore compiled bytecode files
+__pycache__

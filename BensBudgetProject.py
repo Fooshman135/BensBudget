@@ -61,6 +61,8 @@ ACCOUNT_MENU_OPTIONS = ["see your list of accounts,",
 
 class Category:
 
+    total_category_value = 0
+
     def __init__(self, name, value):
         self.name = name
         self.value = value
@@ -76,8 +78,14 @@ class Category:
         name."""
 
         while True:
-            name = input("\nWhat do you want to call your new category? "
-                         "Enter a blank line to cancel: ").strip()
+
+            name = input_blacklist(
+                "\nWhat do you want to call your new category? "
+                "Enter a blank line to cancel: ",
+                str,
+                empty_string_allowed=True
+            )
+
             if name == '':
                 # User wants to cancel this decision.
                 return
@@ -114,8 +122,7 @@ class Category:
     @staticmethod
     def delete_category():
         """Present user with list of existing categories, then delete
-        the one
-         corresponding to the user's selection."""
+        the one corresponding to the user's selection."""
 
         # TODO: Transfer category value to "unbudgeted total" category.
         # TODO: Determine how to handle transactions which refer to the deleted category.
@@ -190,6 +197,33 @@ class Category:
         cur.close()
 
 
+    def update_category_value(self):
+        """Given a Category instance, allow user to update the instance's
+         value."""
+
+        # First, show the user what the category's value currently is.
+        # Then prompt for new value (specify addition or replacement).
+        # Then update the category's value, and update total_category_value.
+
+        # Also, how/when is this method called? The user needs to select a
+        # category before this function is called. Maybe have another
+        # function that handles the selection of which category?
+
+        cur = conn.cursor()
+        cur.execute("SELECT value FROM Categories WHERE name=?", (self.name,))
+        self.value = cur.fetchone()[0]
+
+        output = "Your {} category currently has a value of {}.".format(
+            self.name,
+            self.value)
+        print(output)
+        output = "Your unassigned total account balance is {}".format(
+            Account.total_account_balance)
+        print(output)
+        print("Select an amount to add to the category's value "
+              "(negative amounts will be subtracted from the value):")
+
+
     @staticmethod
     def menu_for_categories():
         """Provide user with information regarding the category menu then
@@ -248,8 +282,13 @@ class Account:
          with that name and balance."""
 
         while True:
-            name = input("\nWhat do you want to call your new account?"
-                         " Enter a blank line to cancel: ").strip()
+            name = input_blacklist(
+                "\nWhat do you want to call your new account?"
+                " Enter a blank line to cancel: ",
+                str,
+                empty_string_allowed=True
+            )
+
             if name == '':
                 # User wants to cancel this decision.
                 return
@@ -268,22 +307,11 @@ class Account:
 
         # Now that the name is accepted, prompt the user to add
         # a starting account balance.
-        while True:
-            balance = input(
-                "Please enter a starting account balance (must be "
-                "non-negative): ")
-            try:
-                balance = float(balance)
-            except ValueError:
-                print("\nInvalid entry, please try again.\n")
-                continue
-            else:
-                if balance < 0:
-                    print(
-                        "\nBalance must be non-negative. Please try again.\n")
-                    continue
-                else:
-                    break
+        balance = input_blacklist(
+            "Please enter a starting account balance (must be non-negative): ",
+            float,
+            num_lb=0
+        )
 
         # Balance is valid, but may have extra decimal places (beyond 2).
         balance = round(balance,2)
@@ -370,7 +398,7 @@ class Account:
         # The '#' means alternate form. Here, it keeps trailing zeros.
         # The '{pad2}' is a nested format specifier.
         #   Here it simply contains a variable.
-        # The ',' groups the digits into sets of 3 each, separated by a comma.
+        # The ',' groups the digits into sets of 3, separated by a comma.
         # The '.2f' means show two digits after the decimal place.
         #   Note that the 'f' in '.2f' specifies fixed point.
 
@@ -506,13 +534,15 @@ def which_budget():
         if choice == 1:
             # The user wants to create a brand new budget.
             while True:
-                # TODO: Change 'enter 0' to 'enter a blank line'.
-                budget_name = user_input_with_error_check_blacklist(
+                budget_name = input_blacklist(
                     "\nPlease choose a name for your new budget, "
-                    "or enter 0 to cancel: ",
-                    ('.', ':', '/'),
-                    (0, None, None)
+                    "or enter a blank line to cancel: ",
+                    str,
+                    str_bad_chars=('.', ':', '/'),
+                    str_bad_chars_positions=(0, None, None),
+                    empty_string_allowed=True
                 )
+
                 # Now confirm that there isn't an existing budget that
                 # already has that name.
                 if os.path.isfile(os.path.join(
@@ -521,7 +551,7 @@ def which_budget():
                           "Please enter a different name.")
                 else:
                     break
-            if budget_name == "0":
+            if budget_name == "":
                 # User wants to cancel. Loop to top of this function.
                 continue
             # Name has been approved, proceed with setting up new database
@@ -642,39 +672,118 @@ def user_input_with_error_check_whitelist(
 # ____________________________________________________________________________#
 
 
-def user_input_with_error_check_blacklist(
-        prompt_message, invalid_tuple, specific_location):
-    """Receive user input and confirm that it's not in the blacklist
-     (certain characters in specific locations)."""
+def input_blacklist(
+        prompt,
+        input_type,
+        num_lb=float('-inf'),
+        num_ub=float('inf'),
+        str_bad_chars=None,
+        str_bad_chars_positions=None,
+        empty_string_allowed=False
+        ):
 
-    # TODO: Find ways to improve this function. I'm sure it can be made better!
+    """
+    Receive user input and confirm that it's not in the blacklist.
 
-    bad_input = True
-    while bad_input:
-        bad_input = False
-        # Innocent until proven guilty (for every iteration of the while loop).
-        user_input = input(prompt_message).strip()
-        if user_input == '':    # Explicitly check for empty string.
-            bad_input = True
-            print("\nInvalid entry, please try again.\n")
-            continue
-        for i in range(len(invalid_tuple)):
-            # Make sure each member of invalid_tuple doesn't
-            # appear in the input.
-            if specific_location[i] is None:    # Not allowed at any location.
-                if invalid_tuple[i] in user_input:
-                    # Reject input.
-                    bad_input = True
-                    print("\nInvalid entry, please try again.\n")
-                    break
+    :param prompt: The message that the user sees when prompted for input.
+    :param input_type: The type of input that the user should enter.
+    :param num_lb: The lower bound (inclusive) of input, if numerical.
+    :param num_ub: The upper bound (inclusive) of input, if numerical.
+    :param str_bad_chars: Any characters which are forbidden, if input is text.
+    :param str_bad_chars_positions: The corresponding positions of the
+            characters in str_bad_chars. If no position is specified for a
+            character, this value is 'None'.
+    :param empty_string_allowed: Flag to specify whether the empty string
+            is acceptable input.
+    :return: The user input, once confirmed that it's acceptable.
+    """
+
+    while True:
+
+        error_output = None
+
+        user_input = input(prompt).strip()
+        # user_input is a string.
+
+        # First check for empty string.
+        if user_input == '':
+            # Determine if empty string is acceptable.
+            if empty_string_allowed:
+                # User input is good to go.
+                break
             else:
-                # Not allowed at the specific location in
-                # specific_location[i], but allowed elsewhere.
-                if invalid_tuple[i] in user_input[specific_location[i]]:
-                    # Reject input.
-                    bad_input = True
+                print("\nInvalid entry, please try again.\n")
+                continue
+
+        if input_type is str:
+
+            if str_bad_chars is None:
+                # No forbidden characters, so user input is good to go.
+                break
+
+            for i in range(len(str_bad_chars)):
+                # Make sure each member of str_bad_chars doesn't
+                # appear in the input at the wrong position.
+                if str_bad_chars_positions[i] is None:
+                    # str_bad_chars[i] is not allowed anywhere within string.
+                    if str_bad_chars[i] in user_input:
+                        # Reject input.
+                        error_output = "Invalid entry, cannot contain" \
+                                       " {}".format(
+                                        str_bad_chars[i]
+                        )
+                        break
+
+                else:
+                    # str_bad_chars[i] is not allowed at the specific location
+                    # specified by str_bad_chars_positions[i], but allowed
+                    # elsewhere.
+                    if str_bad_chars[i] in user_input[
+                            str_bad_chars_positions[i]]:
+                        # Reject input.
+                        error_output = "Invalid entry, character at position" \
+                                       " {} cannot be '{}'".format(
+                                        str_bad_chars_positions[i],
+                                        str_bad_chars[i]
+                        )
+                        break
+
+            if error_output is not None:
+                print("\n%s" % error_output)
+                continue
+            else:
+                # User input is good to go.
+                break
+
+        else:
+            # input_type is either int or float.
+
+            if input_type is int:
+                try:
+                    user_input = int(user_input)
+                except ValueError:
                     print("\nInvalid entry, please try again.\n")
-                    break
+                    continue
+
+            elif input_type is float:
+                try:
+                    user_input = float(user_input)
+                except ValueError:
+                    print("\nInvalid entry, please try again.\n")
+                    continue
+
+            # Now check to make sure user_input is in range.
+            if (user_input < num_lb) or (user_input > num_ub):
+                error_output = "Invalid entry, must be between {} and" \
+                         " {} (inclusive).\n".format(
+                            num_lb,
+                            num_ub
+                )
+                print("\n%s" % error_output)
+                continue
+
+            # user_input is good to go.
+            break
 
     return user_input
 
