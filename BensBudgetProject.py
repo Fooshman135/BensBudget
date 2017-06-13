@@ -79,7 +79,7 @@ class Category:
 
         while True:
 
-            name = input_blacklist(
+            name = input_validation(
                 "\nWhat do you want to call your new category? "
                 "Enter a blank line to cancel: ",
                 str,
@@ -151,14 +151,14 @@ class Category:
                       category_dict[num_categories])
 
         if num_categories > 0:
-            choice_number = user_input_with_error_check_whitelist(
+            choice_number = input_validation(
                 "Enter the number in front of the category you wish to "
-                "delete,"
-                " or enter 0 to cancel: ",
-                range(num_categories + 1),
-                False,
-                True
+                "delete, or enter 0 to cancel: ",
+                int,
+                num_lb=0,
+                num_ub=num_categories
             )
+
             if choice_number > 0:
                 cur.execute("DELETE FROM Categories WHERE name=?",
                             (category_dict[choice_number],))
@@ -282,7 +282,7 @@ class Account:
          with that name and balance."""
 
         while True:
-            name = input_blacklist(
+            name = input_validation(
                 "\nWhat do you want to call your new account?"
                 " Enter a blank line to cancel: ",
                 str,
@@ -307,7 +307,7 @@ class Account:
 
         # Now that the name is accepted, prompt the user to add
         # a starting account balance.
-        balance = input_blacklist(
+        balance = input_validation(
             "Please enter a starting account balance (must be non-negative): ",
             float,
             num_lb=0
@@ -359,13 +359,14 @@ class Account:
                 print("\t%s)" % num_accounts, account_dict[num_accounts])
 
         if num_accounts > 0:
-            choice_number = user_input_with_error_check_whitelist(
+            choice_number = input_validation(
                 "Enter the number in front of the account you wish to delete,"
                 " or enter 0 to cancel: ",
-                range(num_accounts + 1),
-                False,
-                True
+                int,
+                num_lb=0,
+                num_ub=num_accounts
             )
+
             if choice_number > 0:
                 # Update class attribute before deleting record from table.
                 cur.execute("SELECT balance FROM Accounts WHERE name=?",
@@ -534,7 +535,7 @@ def which_budget():
         if choice == 1:
             # The user wants to create a brand new budget.
             while True:
-                budget_name = input_blacklist(
+                budget_name = input_validation(
                     "\nPlease choose a name for your new budget, "
                     "or enter a blank line to cancel: ",
                     str,
@@ -594,13 +595,14 @@ def which_budget():
                 for i in range(len(list_of_budgets)):
                     print("\t%d)" % (i + 1), os.path.splitext(
                         os.path.basename(list_of_budgets[i]))[0])
-                budget_number = user_input_with_error_check_whitelist(
+                budget_number = input_validation(
                     "Enter the number in front of the budget you wish to load,"
                     " or enter 0 to cancel: ",
-                    range(len(list_of_budgets) + 1),
-                    False,
-                    True
+                    int,
+                    num_lb=0,
+                    num_ub=len(list_of_budgets)
                 )
+
                 if budget_number == 0:
                     # User wants to cancel. Loop to top of this function.
                     continue
@@ -630,49 +632,17 @@ def recite_menu_options(list_of_options):
     for i in range(len(list_of_options)):
         print("Press %d to %s" % (i + 1, list_of_options[i]))
 
-    return user_input_with_error_check_whitelist(
+    return input_validation(
         "Enter your choice here: ",
-        range(1, len(list_of_options)+1),
-        False,
-        True
+        int,
+        num_lb=1,
+        num_ub=len(list_of_options)
     )
 
 # ____________________________________________________________________________#
 
 
-def user_input_with_error_check_whitelist(
-        prompt_message, valid_set, upper_only, integer):
-    """Receive user input and confirm that it is in the whitelist and is
-     the proper type."""
-
-    # TODO: Change input parameters to ask for expected input TYPE, rather than upper_only, integer, whatever.
-    # TODO: Currently this function is only called when input should be integers, not strings. upper_only necessary?
-
-    while True:
-        user_input = input(prompt_message)
-        if upper_only:
-            try:
-                user_input = user_input.upper()
-            except AttributeError:
-                print("\nInvalid entry, please try again.\n")
-                continue
-        elif integer:
-            try:
-                user_input = int(user_input)
-            except ValueError:
-                print("\nInvalid entry, please try again.\n")
-                continue
-        if user_input in valid_set:
-            break
-        else:
-            print("\nInvalid entry, please try again.\n")
-
-    return user_input
-
-# ____________________________________________________________________________#
-
-
-def input_blacklist(
+def input_validation(
         prompt,
         input_type,
         num_lb=float('-inf'),
@@ -683,7 +653,7 @@ def input_blacklist(
         ):
 
     """
-    Receive user input and confirm that it's not in the blacklist.
+    Receive user input and verify that it's valid before returning it.
 
     :param prompt: The message that the user sees when prompted for input.
     :param input_type: The type of input that the user should enter.
@@ -804,8 +774,7 @@ if __name__ == "__main__":
 
 """
 Here are ideas of next steps and features:
--Add a Delete Existing Budget option to the main menu.2
-
+-Add a Delete Existing Budget option to the main menu.
 -Implement some sense of time. Consider making the time frame variable, based on user input.
 -Expand the display_categories() function to show more than just the category names. Ideas for expansion include:
     -Showing a table with category names as rows, and other attributes (such as budget_value) as columns.
@@ -822,23 +791,13 @@ Here are ideas of next steps and features:
 -Allow users to create their own subsets of categories (distinct from the idea of super-categories).
     -Allow users to see spending patterns/trends in just that subset.
 -Use regular expressions to check user input (and make sure it's valid).
--Regarding the user_input_with_error_check_whitelist() function, in order to make it universal we need to consider cases where:
-    1) The input needs to be within a set (valid_set);
-    2) The input needs to meet a certain criteria (such as input > 0);
-    3) The input needs to take into consideration the database (such as not be a duplicate, or must be a duplicate, or whatever);
-    4) The input should be converted from string to some other type (int, float, bool?).
-    Ideally, any time the program asks for user input, this function (or the blacklist function) should be called.
-    If it seems like there's a special case where user input should be requested directly, then we probably need to expand this function!
-        For example, the function new_account() currently requests input directly. Opportunity to change this?
-    If I need to create, for example, the set of all positive floats (option #1 instead of #2 above), then I can create a subclass
-        of the set class, and define its __contains__(self, item) method so that it returns True when item >= 0.
 -Implementing classes and OOP instead of procedural programming:
     Make a Category class, an Account class, and a Transaction class.
         And then each category, account, and transaction will be instances of these classes (and therefore will be objects).
         But how do I do this using the SQL database?
             Maybe whenever I read data from the database into memory, it gets stored as an object?
-                YES! YES. Danny confirmed that this is an extremely common way of handling data that is read into memory from a database.
-    Make a Menu class!
+                Yes. I've confirmed that this is an extremely common way of handling data that is read into memory from a database.
+    Make a Menu class.
         And then each menu can be its own object, with its own list of options stored as an attribute.
         The user's input choice should be stored as an attribute.
         But how can I avoid the if...elif...elif... chains in the functions that call recite_menu_options() ?
@@ -849,6 +808,5 @@ Discussion with Dad on 11/26/16:
     config files save user preferences ("configurations")
     Module: configparser
     ~/Library/Application Support/Bens Budget Program
-    
 
 """
