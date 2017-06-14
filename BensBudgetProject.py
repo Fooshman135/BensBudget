@@ -24,6 +24,8 @@ Ben Katz can be contacted at BenCKatz@gmail.com.
 Thank you for your consideration.
 """
 
+# TODO: Currently exposed to injection attacks - need to sanitize inputs which feed into SQL queries.
+
 import os
 import sqlite3
 import glob
@@ -46,9 +48,14 @@ MAIN_MENU_OPTIONS = ["go to the category menu,",
 
 CATEGORY_MENU_OPTIONS = ["see your list of budget categories,",
                          "add a new category,",
-                         "delete an existing category,",
+                         "modify an existing category,",
                          "return to the main menu."
                          ]
+
+CATEGORY_INSTANCE_OPTIONS = ["edit the category's name,",
+                             "edit the category's value,",
+                             "delete the category,",
+                             "return to the category menu."]
 
 ACCOUNT_MENU_OPTIONS = ["see your list of accounts,",
                         "add a new account,",
@@ -61,19 +68,14 @@ ACCOUNT_MENU_OPTIONS = ["see your list of accounts,",
 
 class Category:
 
-    total_category_value = 0
+    unassigned_funds = 0
 
     def __init__(self, name, value):
         self.name = name
         self.value = value
 
-    # Are there any class attributes? These would basically be properties
-    # of Categories that might change over time.
-    # If no class attributes, then use static methods instead of class methods.
-
-
-    @staticmethod
-    def new_category():
+    @classmethod
+    def new_category(cls):
         """Prompt the user for a name and then create a category with that
         name."""
 
@@ -89,6 +91,7 @@ class Category:
             if name == '':
                 # User wants to cancel this decision.
                 return
+
             cur = conn.cursor()
             cur.execute("SELECT name FROM Categories WHERE name=?", (name,))
             check = cur.fetchall()
@@ -101,31 +104,154 @@ class Category:
                       "Please choose a different name.\n")
                 continue
 
-        # Category name has been approved, so now ask for value.
-        # Then check to make sure value is less than total account balance.
-        # If so, add data to category table in the database.
-        # Else, inform user and ask for another value.
-
-
-
-
-
-
-        cur.execute('INSERT INTO Categories VALUES(?,0)', (name,))
-        cur.close()
-        conn.commit()
-
+        # Category name has been approved, so now ask if user would like
+        # to assign a value.
         print(
             "\nOkay! You added a new category called %s to your list!" % name)
+        if cls.unassigned_funds > 0:
+            output = "There is ${:,.2f} available to be assigned to " \
+                     "categories. How much would you like to assign to {} " \
+                     "now? Enter a number: ".format(cls.unassigned_funds, name)
+            value = input_validation(
+                output,
+                float,
+                num_lb=0,
+                num_ub=cls.unassigned_funds
+            )
 
+            # value is valid, but may have extra decimal places (beyond 2).
+            value = round(value, 2)
+            print("\n${:,.2f} has been added to {}".format(value, name))
 
-    @staticmethod
-    def delete_category():
+        else:
+            # Unassigned funds = 0, so value must also be set to 0.
+            output = "There is $0 available to be assigned to categories," \
+                     " so {}'s value will be $0 for now.".format(name)
+            print(output)
+            value = 0
+
+        # Category name and value have been approved, so add them
+        # to the Categories table in the database.
+        cur.execute('INSERT INTO Categories VALUES(?,?)', (name, value))
+        conn.commit()
+        cur.close()
+
+        # Finally, update the class attribute for total account balance.
+        cls.unassigned_funds -= value
+
+    def delete_category(self):
         """Present user with list of existing categories, then delete
         the one corresponding to the user's selection."""
 
-        # TODO: Transfer category value to "unbudgeted total" category.
         # TODO: Determine how to handle transactions which refer to the deleted category.
+
+        # Ask the user to confirm that the category should be deleted.
+        # If yes, then delete it.
+        text = "Are you sure that you want to delete the {} category? ".format(
+                self.name)
+
+        confirmation = input_validation(
+            text+"Enter 1 for yes, 0 for no: ",
+            int,
+            num_lb=0,
+            num_ub=1
+        )
+
+        if confirmation == 1:
+            # Delete the category.
+            cur = conn.cursor()
+
+            cur.execute("SELECT value FROM Categories WHERE name=?",
+                        (self.name,))
+            temp = cur.fetchall()[0][0]
+            Category.unassigned_funds += temp
+
+            cur.execute("DELETE FROM Categories WHERE name=?",
+                        (self.name,))
+            conn.commit()
+            print("\nYou have successfully deleted %s from your"
+                  " list of categories." % self.name)
+            cur.close()
+            return confirmation
+
+    @classmethod
+    def display_categories(cls):
+        """Query the names and values of the user's categories and present them
+        in a vertical list."""
+
+        # TODO: Use with statement to open and close the cursor.
+        # TODO: Fix floating point errors for large numbers. Use "decimal" module?
+
+        # Here is how to interpret the string format specifiers below:
+        # Let's look at {:>#{pad2},.2f} as an example.
+        # The ':' means the following characters are 'format_specs'.
+        # The '>' means right-justified.
+        # The '#' means alternate form. Here, it keeps trailing zeros.
+        # The '{pad2}' is a nested format specifier.
+        #   Here it simply contains a variable.
+        # The ',' groups the digits into sets of 3, separated by a comma.
+        # The '.2f' means show two digits after the decimal place.
+        #   Note that the 'f' in '.2f' specifies fixed point.
+
+        cur = conn.cursor()
+        cur.execute("SELECT name, value FROM Categories")
+        instance_list = [Category(name=i[0], value=i[1])
+                         for i in cur.fetchall()]
+
+        if len(instance_list) == 0:
+            # The Categories table contains no data
+            print("\nYou have no categories! You should make some!")
+            cur.close()
+            return
+
+        # Now determine the longest name and balance (when printed).
+        max_name_length = 16        # 16 is the length of "Unassigned Funds".
+        unassigned_funds_string = "{:#,.2f}".format(cls.unassigned_funds)
+        max_balance_length = len(unassigned_funds_string)
+
+        for category in instance_list:
+            if len(category.name) > max_name_length:
+                max_name_length = len(category.name)
+            balance_str = "{:#,.2f}".format(category.value)
+            if len(balance_str) > max_balance_length:
+                max_balance_length = len(balance_str)
+
+        # Print each category row by row.
+        print("\nHere are your categories and their values:")
+        for category in instance_list:
+            output = "{:{pad1}}    $ {:>#{pad2},.2f}".format(
+                category.name,
+                category.value,
+                pad1=max_name_length,
+                pad2=max_balance_length
+                )
+            print("\t%s" % output)
+
+        # Finally, display the unassigned funds.
+        final_line_output = "{:{pad1}}    $ {:>#{pad2},.2f}".format(
+            "Unassigned Funds",
+            cls.unassigned_funds,
+            pad1=max_name_length,
+            pad2=max_balance_length)
+        print("\t%s" % ("-"*len(final_line_output)))
+        print("\t%s" % final_line_output)
+
+        cur.close()
+
+    @staticmethod
+    def choose_category():
+        """This method is called anytime we need an instance of a Category.
+        Once the user selects a category, we create an instance of it.
+        Then we can call instance methods on that category."""
+
+        # Present user with list of categories.
+        # Ask user to choose one.
+        # Then load that category's data into memory as an object instance.
+        # Then return it.
+
+        # Maybe I should use some of the code in the delete_category method.
+        # In fact, delete_category should be one of the options available
+        # after the user chooses a category to make changes to.
 
         num_categories = 0
         category_dict = {}
@@ -145,7 +271,7 @@ class Category:
                 break
             else:
                 if num_categories == 0:
-                    print("\nWhich category do you want to delete?")
+                    print("\nWhich category do you want to select?")
                 num_categories += 1
                 print("\t%s)" % num_categories,
                       category_dict[num_categories])
@@ -153,49 +279,28 @@ class Category:
         if num_categories > 0:
             choice_number = input_validation(
                 "Enter the number in front of the category you wish to "
-                "delete, or enter 0 to cancel: ",
+                "select, or enter 0 to cancel: ",
                 int,
                 num_lb=0,
                 num_ub=num_categories
             )
 
             if choice_number > 0:
-                cur.execute("DELETE FROM Categories WHERE name=?",
+                # Create object instance and copy data into memory.
+                cur.execute("SELECT * FROM Categories WHERE name=?",
                             (category_dict[choice_number],))
-                conn.commit()
-                print("\nYou have successfully deleted %s from your"
-                      " list of categories." % category_dict[
-                          choice_number])
+                temp = cur.fetchall()[0]
+                selected_category = Category(
+                    name=temp[0],
+                    value=temp[1]
+                    )
+                cur.close()
+                print("\nYou have selected the {} category.".format(
+                    selected_category.name))
+                return selected_category
 
         cur.close()
-
-
-    @staticmethod
-    def display_categories():
-        """Query the names of the user's categories and present them
-        in a vertical list."""
-
-        cur = conn.cursor()
-        cur.execute("SELECT name FROM Categories")
-        num_categories = 0
-        while True:
-            try:
-                next_category = cur.fetchone()[0]
-            except TypeError:
-                # cur.fetchone() returns None at the end of the query,
-                # which is non-subscriptable.
-                if num_categories == 0:
-                    # The Accounts table contains no data
-                    print("\nYou have no categories! You should make some!")
-                break
-            else:
-                if num_categories == 0:
-                    print("\nHere are your categories:")
-                print("\t", next_category)
-                num_categories += 1
-
-        cur.close()
-
+        return None
 
     def update_category_value(self):
         """Given a Category instance, allow user to update the instance's
@@ -205,24 +310,45 @@ class Category:
         # Then prompt for new value (specify addition or replacement).
         # Then update the category's value, and update total_category_value.
 
-        # Also, how/when is this method called? The user needs to select a
-        # category before this function is called. Maybe have another
-        # function that handles the selection of which category?
-
-        cur = conn.cursor()
-        cur.execute("SELECT value FROM Categories WHERE name=?", (self.name,))
-        self.value = cur.fetchone()[0]
-
-        output = "Your {} category currently has a value of {}.".format(
+        output = "Your {} category currently has a value of ${:,.2f}.".format(
             self.name,
             self.value)
+        print("\n%s" % output)
+        output = "Your total amount of unassigned funds is ${:,.2f}".format(
+            Category.unassigned_funds)
         print(output)
-        output = "Your unassigned total account balance is {}".format(
-            Account.total_account_balance)
-        print(output)
-        print("Select an amount to add to the category's value "
-              "(negative amounts will be subtracted from the value):")
+        output = "Select an amount to add to the category's value "+\
+            "(negative amounts will be subtracted from the value): "
 
+        diff = input_validation(
+            output,
+            float,
+            num_lb=self.value*(-1)+0,
+            num_ub=Category.unassigned_funds
+        )
+
+        # Update the class attributes
+        self.value += diff
+        Category.unassigned_funds -= diff
+
+        # Now to update the value in the database.
+        cur = conn.cursor()
+        cur.execute("UPDATE Categories SET value=? WHERE name=?",
+                    (self.value, self.name))
+        conn.commit()
+
+        # Inform the user of the result.
+        if diff == 0:
+            output = "No change was made to the category's value."
+        elif diff > 0:
+            output = "You added an additional ${:,.2f} to the {} category's" \
+                     " value.".format(diff, self.name)
+        elif diff < 0:
+            output = "You subtracted ${:,.2f} from the {} category's" \
+                     " value.".format(diff*(-1), self.name)
+
+        print("\n%s" % output)
+        cur.close()
 
     @staticmethod
     def menu_for_categories():
@@ -237,7 +363,24 @@ class Category:
             elif choice == 2:
                 Category.new_category()
             elif choice == 3:
-                Category.delete_category()
+                instance = Category.choose_category()
+                if instance is not None:
+                    # Object instance is now in memory.
+                    # Present user with category instance menu.
+                    while True:
+                        choice2 = recite_menu_options(
+                            CATEGORY_INSTANCE_OPTIONS)
+                        if choice2 == 1:
+                            pass    # Build out!
+                        elif choice2 == 2:
+                            instance.update_category_value()
+                        elif choice2 == 3:
+                            confirmation = instance.delete_category()
+                            if confirmation == 1:
+                                break
+                        elif choice2 == 4:
+                            break
+
             elif choice == 4:
                 break
 
@@ -254,7 +397,6 @@ class Transaction:
         self.account = account
         self.date = date
         self.UID = UID
-
 
     @staticmethod
     def menu_for_transactions():
@@ -274,7 +416,6 @@ class Account:
     def __init__(self, name, balance):
         self.name = name
         self.balance = balance
-
 
     @classmethod
     def new_account(cls):
@@ -314,7 +455,7 @@ class Account:
         )
 
         # Balance is valid, but may have extra decimal places (beyond 2).
-        balance = round(balance,2)
+        balance = round(balance, 2)
 
         # Account name and balance have been approved, so add them to the
         # accounts table in the database.
@@ -324,9 +465,9 @@ class Account:
 
         # Finally, update the class attribute for total account balance.
         cls.total_account_balance += balance
+        Category.unassigned_funds += balance
 
         print("\nOkay! You added a new account called %s to your list!" % name)
-
 
     @classmethod
     def delete_account(cls):
@@ -371,7 +512,9 @@ class Account:
                 # Update class attribute before deleting record from table.
                 cur.execute("SELECT balance FROM Accounts WHERE name=?",
                             (account_dict[choice_number],))
-                cls.total_account_balance -= cur.fetchall()[0][0]
+                temp = cur.fetchall()[0][0]
+                cls.total_account_balance -= temp
+                Category.unassigned_funds -= temp
 
                 # Now okay to delete record.
                 cur.execute("DELETE FROM Accounts WHERE name=?",
@@ -382,7 +525,6 @@ class Account:
                       " of accounts." % account_dict[choice_number])
 
         cur.close()
-
 
     @classmethod
     def display_accounts(cls):
@@ -403,52 +545,46 @@ class Account:
         # The '.2f' means show two digits after the decimal place.
         #   Note that the 'f' in '.2f' specifies fixed point.
 
-        # Determine the length of the longest string in the name column of the
-        # Accounts table (for formatting purposes).
         cur = conn.cursor()
-        cur.execute("SELECT MAX(LENGTH(name)) FROM Accounts")
-        max_name_length = cur.fetchone()[0]
-        if max_name_length is None:
+        cur.execute("SELECT name, balance FROM Accounts")
+        instance_list = [Account(name=i[0], balance=i[1])
+                         for i in cur.fetchall()]
+
+        if len(instance_list) == 0:
             # The Accounts table contains no data
             print("\nYou have no accounts! You should add some!")
             cur.close()
             return
 
-        # Determine the length of the longest number in the balance column of
-        # the Accounts table (for formatting purposes).
-        cur.execute("SELECT MAX(balance) FROM Accounts")
-        max_balance_length = len("{:#,.2f}".format(cur.fetchone()[0]))
+        # Now determine the longest name and balance (when printed).
+        total_balance_string = "{:#,.2f}".format(cls.total_account_balance)
+        max_balance_length = len(total_balance_string)
+        max_name_length = 13        # 13 is the length of "Total balance".
+        for account in instance_list:
+            if len(account.name) > max_name_length:
+                max_name_length = len(account.name)
 
-        # Retrieve the name and balance attributes from the Account table.
-        cur.execute("SELECT name, balance FROM Accounts")
-
+        # Print each account row by row.
         print("\nHere are your accounts and their balances:")
-        while True:
-            try:
-                next_account_name, next_account_balance = cur.fetchone()
-            except TypeError:
-                # cur.fetchone() returns None at the end of the query,
-                # which is not iterable (producing a TypeError).
-                break
-            else:
-                output = "{:{pad1}}    $ {:>#{pad2},.2f}".format(
-                    next_account_name,
-                    next_account_balance,
-                    pad1=max(max_name_length, 13),
-                    pad2=max_balance_length)
-                print("\t%s" % output)
+        for account in instance_list:
+            output = "{:{pad1}}    $ {:>#{pad2},.2f}".format(
+                account.name,
+                account.balance,
+                pad1=max_name_length,
+                pad2=max_balance_length
+                )
+            print("\t%s" % output)
 
         # Finally, display the total account balance.
         final_line_output = "{:{pad1}}    $ {:>#{pad2},.2f}".format(
             "Total Balance",
             cls.total_account_balance,
-            pad1=max(max_name_length, 13),
+            pad1=max_name_length,
             pad2=max_balance_length)
         print("\t%s" % ("-"*len(final_line_output)))
         print("\t%s" % final_line_output)
 
         cur.close()
-
 
     @staticmethod
     def menu_for_accounts():
@@ -480,8 +616,9 @@ def main():
     """Main menu of the program, acting as 'central hub' through which users
     navigate to get to all other parts."""
 
+    # TODO replace 'cur.fetchall()[0][0]' with a better sqlite3 method.
+
     global conn
-    global user_budgets
 
     # All files affiliated with this program will be located at the path
     # stored in CONFIG_DIRECTORY.
@@ -495,16 +632,26 @@ def main():
     # Here is where the user experience begins:
     print("\nWelcome to Ben's Budget Program!")
     while True:
-        conn = which_budget()
+        conn = which_budget(user_budgets)
 
         # Now that a budget is selected, update the total account balance.
         cur = conn.cursor()
         cur.execute("SELECT SUM(balance) FROM Accounts")
         Account.total_account_balance = cur.fetchall()[0][0]
-        cur.close()
+
         # A brand new budget has no data, so cur.fetchall returns None.
-        if Account.total_account_balance == None:
+        if Account.total_account_balance is None:
             Account.total_account_balance = 0
+
+        # Also update the unassigned funds.
+        cur.execute("SELECT SUM(value) FROM Categories")
+        temp = cur.fetchall()[0][0]
+
+        # A brand new budget has no data, so cur.fetchall returns None.
+        if temp is None:
+            temp = 0
+        Category.unassigned_funds = Account.total_account_balance - temp
+        cur.close()
 
         while True:
             choice = recite_menu_options(MAIN_MENU_OPTIONS)
@@ -524,8 +671,8 @@ def main():
 # ____________________________________________________________________________#
 
 
-def which_budget():
-    """Top-level menu, determines which budget (database) to connect to"""
+def which_budget(user_budgets):
+    """Top-level menu, determines which budget (database) to connect to."""
 
     # TODO: Make filenames distinct from user-supplied budget names. Then no need to limit user's input!
     # TODO: Provide option to delete an existing budget.
@@ -701,7 +848,7 @@ def input_validation(
                         error_output = "Invalid entry, cannot contain" \
                                        " {}".format(
                                         str_bad_chars[i]
-                        )
+                                        )
                         break
 
                 else:
@@ -715,45 +862,50 @@ def input_validation(
                                        " {} cannot be '{}'".format(
                                         str_bad_chars_positions[i],
                                         str_bad_chars[i]
-                        )
+                                        )
                         break
 
             if error_output is not None:
                 print("\n%s" % error_output)
                 continue
-            else:
-                # User input is good to go.
-                break
 
-        else:
-            # input_type is either int or float.
-
-            if input_type is int:
-                try:
-                    user_input = int(user_input)
-                except ValueError:
-                    print("\nInvalid entry, please try again.\n")
-                    continue
-
-            elif input_type is float:
-                try:
-                    user_input = float(user_input)
-                except ValueError:
-                    print("\nInvalid entry, please try again.\n")
-                    continue
-
+        elif input_type is int:
+            try:
+                user_input = int(user_input)
+            except ValueError:
+                print("\nInvalid entry, please try again.\n")
+                continue
             # Now check to make sure user_input is in range.
             if (user_input < num_lb) or (user_input > num_ub):
                 error_output = "Invalid entry, must be between {} and" \
                          " {} (inclusive).\n".format(
                             num_lb,
                             num_ub
-                )
+                            )
                 print("\n%s" % error_output)
                 continue
 
-            # user_input is good to go.
-            break
+        else:
+            # input_type is float.
+            try:
+                user_input = float(user_input)
+            except ValueError:
+                print("\nInvalid entry, please try again.\n")
+                continue
+            # Now check to make sure user_input is in range.
+            if (user_input < num_lb) or (user_input > num_ub):
+                error_output = "Invalid entry, must be between {:,.2f} and" \
+                         " {:,.2f} (inclusive).\n".format(
+                            num_lb,
+                            num_ub
+                            )
+                print("\n%s" % error_output)
+                continue
+            # Finally, if '-0' was entered, turn into +0.
+            user_input += 0
+
+        # user_input is good to go.
+        break
 
     return user_input
 
