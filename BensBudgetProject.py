@@ -79,6 +79,7 @@ class Category:
         """Prompt the user for a name and then create a category with that
         name."""
 
+        cur = conn.cursor()
         while True:
 
             name = input_validation(
@@ -90,9 +91,9 @@ class Category:
 
             if name == '':
                 # User wants to cancel this decision.
+                cur.close()
                 return
 
-            cur = conn.cursor()
             cur.execute("SELECT name FROM Categories WHERE name=?", (name,))
             check = cur.fetchall()
             if not check:
@@ -125,10 +126,10 @@ class Category:
 
         else:
             # Unassigned funds = 0, so value must also be set to 0.
+            value = 0
             output = "There is $0 available to be assigned to categories," \
                      " so {}'s value will be $0 for now.".format(name)
             print(output)
-            value = 0
 
         # Category name and value have been approved, so add them
         # to the Categories table in the database.
@@ -186,7 +187,6 @@ class Category:
         # Let's look at {:>#{pad2},.2f} as an example.
         # The ':' means the following characters are 'format_specs'.
         # The '>' means right-justified.
-        # The '#' means alternate form. Here, it keeps trailing zeros.
         # The '{pad2}' is a nested format specifier.
         #   Here it simply contains a variable.
         # The ',' groups the digits into sets of 3, separated by a comma.
@@ -206,20 +206,20 @@ class Category:
 
         # Now determine the longest name and balance (when printed).
         max_name_length = 16        # 16 is the length of "Unassigned Funds".
-        unassigned_funds_string = "{:#,.2f}".format(cls.unassigned_funds)
+        unassigned_funds_string = "{:,.2f}".format(cls.unassigned_funds)
         max_balance_length = len(unassigned_funds_string)
 
         for category in instance_list:
             if len(category.name) > max_name_length:
                 max_name_length = len(category.name)
-            balance_str = "{:#,.2f}".format(category.value)
+            balance_str = "{:,.2f}".format(category.value)
             if len(balance_str) > max_balance_length:
                 max_balance_length = len(balance_str)
 
         # Print each category row by row.
         print("\nHere are your categories and their values:")
         for category in instance_list:
-            output = "{:{pad1}}    $ {:>#{pad2},.2f}".format(
+            output = "{:{pad1}}    ${:>{pad2},.2f}".format(
                 category.name,
                 category.value,
                 pad1=max_name_length,
@@ -228,7 +228,7 @@ class Category:
             print("\t%s" % output)
 
         # Finally, display the unassigned funds.
-        final_line_output = "{:{pad1}}    $ {:>#{pad2},.2f}".format(
+        final_line_output = "{:{pad1}}    ${:>{pad2},.2f}".format(
             "Unassigned Funds",
             cls.unassigned_funds,
             pad1=max_name_length,
@@ -302,13 +302,60 @@ class Category:
         cur.close()
         return None
 
+    def update_category_name(self):
+        """Given a Category instance, allow user to update the instance's
+        name."""
+
+        print("\nYour category name is currently {}.".format(self.name))
+        output = "What would you like to rename it as? " \
+                 "Enter a blank line to cancel: "
+        cur = conn.cursor()
+        while True:
+            name = input_validation(
+                output,
+                str,
+                empty_string_allowed=True
+            )
+
+            if name == '':
+                # User wants to cancel this decision.
+                cur.close()
+                return
+
+            if name == self.name:
+                # User typed the same name as what the category already has.
+                print("\nCategory name will remain {}".format(self.name))
+                cur.close()
+                return
+
+            cur.execute("SELECT name FROM Categories WHERE name=?", (name,))
+            check = cur.fetchall()
+            if not check:
+                # The name which the user entered is not already
+                # in the Categories table.
+                break
+            else:
+                print("\nA category already exists with that name. "
+                      "Please choose a different name.\n")
+                continue
+
+        # Name has been approved, so update the database.
+        cur.execute("UPDATE Categories SET name=? WHERE name=?",
+                    (name, self.name))
+        conn.commit()
+        cur.close()
+
+        # Inform the user of the result.
+        output = "You have changed the category name from {} to {}.".format(
+            self.name,
+            name
+            )
+        print("\n%s" % output)
+        self.name = name
+
     def update_category_value(self):
         """Given a Category instance, allow user to update the instance's
          value."""
-
-        # First, show the user what the category's value currently is.
-        # Then prompt for new value (specify addition or replacement).
-        # Then update the category's value, and update total_category_value.
 
         output = "Your {} category currently has a value of ${:,.2f}.".format(
             self.name,
@@ -317,6 +364,14 @@ class Category:
         output = "Your total amount of unassigned funds is ${:,.2f}".format(
             Category.unassigned_funds)
         print(output)
+
+        # In the special case where both the category and the unassigned
+        # funds have $0, don't make user enter any input.
+        if Category.unassigned_funds == 0 and self.value == 0:
+            print("Since these are both $0.00, you can't update the value"
+                  " right now.")
+            return
+
         output = "Select an amount to add to the category's value "+\
             "(negative amounts will be subtracted from the value): "
 
@@ -355,6 +410,8 @@ class Category:
         """Provide user with information regarding the category menu then
         direct them to the appropriate functions."""
 
+        # TODO Within Category_instance_menu, add option to view transactions associated with the selected category.
+
         print("\n~~You are now in the categories menu.~~")
         while True:
             choice = recite_menu_options(CATEGORY_MENU_OPTIONS)
@@ -368,10 +425,20 @@ class Category:
                     # Object instance is now in memory.
                     # Present user with category instance menu.
                     while True:
+                        # Display the selected Category's attributes at the
+                        # top of the menu.
+                        output = "{}    ${:>,.2f}".format(
+                                instance.name,
+                                instance.value
+                                )
+                        print()
+                        print("-"*len(output))
+                        print(output)
+                        print("-"*len(output))
                         choice2 = recite_menu_options(
                             CATEGORY_INSTANCE_OPTIONS)
                         if choice2 == 1:
-                            pass    # Build out!
+                            instance.update_category_name()
                         elif choice2 == 2:
                             instance.update_category_value()
                         elif choice2 == 3:
@@ -410,6 +477,8 @@ class Transaction:
 
 
 class Account:
+
+    # TODO: Balance and Starting Balance should be two different attributes of each account instance. SB could be implemented as a transaction (like what YNAB does).
 
     total_account_balance = 0
 
@@ -474,7 +543,6 @@ class Account:
         """Present user with list of existing accounts, then delete the one
          corresponding to the user's selection."""
 
-        # TODO: Determine how to handle transactions which refer to the deleted account.
         # TODO: Only let users delete accounts with zero transactions (prompt them to handle those transactions themselves).
 
         num_accounts = 0
@@ -509,20 +577,38 @@ class Account:
             )
 
             if choice_number > 0:
-                # Update class attribute before deleting record from table.
+
                 cur.execute("SELECT balance FROM Accounts WHERE name=?",
                             (account_dict[choice_number],))
                 temp = cur.fetchall()[0][0]
-                cls.total_account_balance -= temp
-                Category.unassigned_funds -= temp
 
-                # Now okay to delete record.
-                cur.execute("DELETE FROM Accounts WHERE name=?",
-                            (account_dict[choice_number],))
-                conn.commit()
+                # Check to see if unassigned funds will become negative.
+                # If so, prompt user to change category values first.
+                if Category.unassigned_funds - temp < 0:
+                    output = "This account's balance (${:,.2f}) exceeds the" \
+                             " amount of unassigned funds (${:,.2f}), so it" \
+                             " can't be deleted yet.".format(
+                                temp,
+                                Category.unassigned_funds
+                                )
+                    print("\n%s" % output)
+                    output = "Please free up at least ${:,.2f} from your" \
+                             " categories' values before deleting this" \
+                             " account.".format(temp-Category.unassigned_funds)
+                    print(output)
 
-                print("\nYou have successfully deleted %s from your list"
-                      " of accounts." % account_dict[choice_number])
+                else:
+                    # Update class attribute before deleting record from table.
+                    cls.total_account_balance -= temp
+                    Category.unassigned_funds -= temp
+
+                    # Now okay to delete record.
+                    cur.execute("DELETE FROM Accounts WHERE name=?",
+                                (account_dict[choice_number],))
+                    conn.commit()
+
+                    print("\nYou have successfully deleted %s from your list"
+                          " of accounts." % account_dict[choice_number])
 
         cur.close()
 
@@ -538,7 +624,6 @@ class Account:
         # Let's look at {:>#{pad2},.2f} as an example.
         # The ':' means the following characters are 'format_specs'.
         # The '>' means right-justified.
-        # The '#' means alternate form. Here, it keeps trailing zeros.
         # The '{pad2}' is a nested format specifier.
         #   Here it simply contains a variable.
         # The ',' groups the digits into sets of 3, separated by a comma.
@@ -557,7 +642,7 @@ class Account:
             return
 
         # Now determine the longest name and balance (when printed).
-        total_balance_string = "{:#,.2f}".format(cls.total_account_balance)
+        total_balance_string = "{:,.2f}".format(cls.total_account_balance)
         max_balance_length = len(total_balance_string)
         max_name_length = 13        # 13 is the length of "Total balance".
         for account in instance_list:
@@ -567,7 +652,7 @@ class Account:
         # Print each account row by row.
         print("\nHere are your accounts and their balances:")
         for account in instance_list:
-            output = "{:{pad1}}    $ {:>#{pad2},.2f}".format(
+            output = "{:{pad1}}    ${:>{pad2},.2f}".format(
                 account.name,
                 account.balance,
                 pad1=max_name_length,
@@ -576,7 +661,7 @@ class Account:
             print("\t%s" % output)
 
         # Finally, display the total account balance.
-        final_line_output = "{:{pad1}}    $ {:>#{pad2},.2f}".format(
+        final_line_output = "{:{pad1}}    ${:>{pad2},.2f}".format(
             "Total Balance",
             cls.total_account_balance,
             pad1=max_name_length,
@@ -926,11 +1011,8 @@ if __name__ == "__main__":
 
 """
 Here are ideas of next steps and features:
--Add a Delete Existing Budget option to the main menu.
+-Add a Delete Existing Budget option to the top menu.
 -Implement some sense of time. Consider making the time frame variable, based on user input.
--Expand the display_categories() function to show more than just the category names. Ideas for expansion include:
-    -Showing a table with category names as rows, and other attributes (such as budget_value) as columns.
-    -Similar to YNAB, show total transactions for the given time period.
 -Build out the transactions section of the program.
 -Consider making a function that prompts the user "Press enter to continue" and doesn't continue until they do.
     -Call this function every time they enter some input (after the immediate results of their input is shown to them.
@@ -939,26 +1021,21 @@ Here are ideas of next steps and features:
         -they enter a number,
         -the program tells them what the immediate result of their input is,
         -the program calls this press_enter_to_continue function
--Python does not have a switch statement, so the current use of if/elif/else will have to do.
 -Allow users to create their own subsets of categories (distinct from the idea of super-categories).
     -Allow users to see spending patterns/trends in just that subset.
 -Use regular expressions to check user input (and make sure it's valid).
 -Implementing classes and OOP instead of procedural programming:
-    Make a Category class, an Account class, and a Transaction class.
-        And then each category, account, and transaction will be instances of these classes (and therefore will be objects).
-        But how do I do this using the SQL database?
-            Maybe whenever I read data from the database into memory, it gets stored as an object?
-                Yes. I've confirmed that this is an extremely common way of handling data that is read into memory from a database.
     Make a Menu class.
         And then each menu can be its own object, with its own list of options stored as an attribute.
         The user's input choice should be stored as an attribute.
         But how can I avoid the if...elif...elif... chains in the functions that call recite_menu_options() ?
     Once I implement classes in my code, it might make sense to incorporate an Object-Relational Mapping (ORM) to replace my SQL commands.
-
-Discussion with Dad on 11/26/16:
 -Implement config files
     config files save user preferences ("configurations")
     Module: configparser
     ~/Library/Application Support/Bens Budget Program
-
+-Design decision: How to implement each accounts' starting balance (SB)?
+    -YNAB creates a new transaction for the SB and puts "Starting Balance" as the Payee.
+        -This allows the user to delete that transaction if they wish.
+    -An alternative would be to have SB be its own attribute of Accounts, distinct from the cumulative balance (which is calculated from the SB and all transactions with that account).
 """
