@@ -63,6 +63,22 @@ ACCOUNT_MENU_OPTIONS = ["see your list of accounts,",
                         "return to the main menu."
                         ]
 
+TRANSACTION_MENU_OPTIONS = ["view your transactions,",
+                            "add a new transaction,",
+                            "modify an existing transaction",
+                            "return to the main menu."
+                            ]
+
+TRANSACTION_INSTANCE_OPTIONS = ["edit the transaction's account,",
+                                "edit the transaction's category,",
+                                "edit the transaction's amount,",
+                                "edit the transaction's payee,",
+                                "edit the transaction's date,",
+                                "edit the transaction's memo,",
+                                "delete the transaction,",
+                                "return to the transaction menu."
+                                ]
+
 # ____________________________________________________________________________#
 
 
@@ -244,15 +260,6 @@ class Category:
         Once the user selects a category, we create an instance of it.
         Then we can call instance methods on that category."""
 
-        # Present user with list of categories.
-        # Ask user to choose one.
-        # Then load that category's data into memory as an object instance.
-        # Then return it.
-
-        # Maybe I should use some of the code in the delete_category method.
-        # In fact, delete_category should be one of the options available
-        # after the user chooses a category to make changes to.
-
         num_categories = 0
         category_dict = {}
 
@@ -411,6 +418,7 @@ class Category:
         direct them to the appropriate functions."""
 
         # TODO Within Category_instance_menu, add option to view transactions associated with the selected category.
+        # TODO: Within Category_instance_menu, add option to create a new transaction with that category.
 
         print("\n~~You are now in the categories menu.~~")
         while True:
@@ -447,7 +455,7 @@ class Category:
                                 break
                         elif choice2 == 4:
                             break
-
+                    print("\n~~You are now returning to the category menu.~~")
             elif choice == 4:
                 break
 
@@ -456,29 +464,262 @@ class Category:
 
 class Transaction:
 
-    def __init__(self, amount, payee, category, memo, account, date, UID):
+    def __init__(self, uid, account, category, amount, payee, date, memo):
+        self.uid = uid
+        self.account = account
+        self.category = category
         self.amount = amount
         self.payee = payee
-        self.category = category
-        self.memo = memo
-        self.account = account
         self.date = date
-        self.UID = UID
+        self.memo = memo
+
+    @classmethod
+    def new_transaction(cls):
+        """Prompt the user to complete the fields and then create a transaction
+        with that information."""
+
+        #First verify that at least one account and category exist.
+        #Then ask the user to choose an account.
+            #Allow user to cancel via entering '0'.
+            #If account has $0, tell user and ask for another account (quitting remains an option).
+        #Then ask for a category.
+            #Continue to allow user to cancel via entering '0'.
+            #If category has $0, tell user and ask for another category (quitting remains an option).
+        #Then ask for an amount.
+            #Continue to allow user to cancel via entering '0'.
+            #Confirm that the amount chosen is less than both the account balance and the category value.
+                #Otherwise, tell user to try again (quitting remains an option).
+        #Then ask for a payee
+        #Then ask for a date? Maybe not yet...
+        #Then ask for a memo? Myabe not yet...
+        #Now create a UID (random number generator that checks list of existing UIDs?).
+        #Query into the database and commit.
+        #Update the account's balance.
+        #Update the category's value.
+
+
+
+
+
+        cur = conn.cursor()
+        while True:
+
+            name = input_validation(
+                "\nWhat do you want to call your new category? "
+                "Enter a blank line to cancel: ",
+                str,
+                empty_string_allowed=True
+            )
+
+            if name == '':
+                # User wants to cancel this decision.
+                cur.close()
+                return
+
+            cur.execute("SELECT name FROM Categories WHERE name=?", (name,))
+            check = cur.fetchall()
+            if not check:
+                # The name which the user entered is not already
+                # in the Categories table.
+                break
+            else:
+                print("\nA category already exists with that name. "
+                      "Please choose a different name.\n")
+                continue
+
+        # Category name has been approved, so now ask if user would like
+        # to assign a value.
+        print(
+            "\nOkay! You added a new category called %s to your list!" % name)
+        if cls.unassigned_funds > 0:
+            output = "There is ${:,.2f} available to be assigned to " \
+                     "categories. How much would you like to assign to {} " \
+                     "now? Enter a number: ".format(cls.unassigned_funds, name)
+            value = input_validation(
+                output,
+                float,
+                num_lb=0,
+                num_ub=cls.unassigned_funds
+            )
+
+            # value is valid, but may have extra decimal places (beyond 2).
+            value = round(value, 2)
+            print("\n${:,.2f} has been added to {}".format(value, name))
+
+        else:
+            # Unassigned funds = 0, so value must also be set to 0.
+            value = 0
+            output = "There is $0 available to be assigned to categories," \
+                     " so {}'s value will be $0 for now.".format(name)
+            print(output)
+
+        # Category name and value have been approved, so add them
+        # to the Categories table in the database.
+        cur.execute('INSERT INTO Categories VALUES(?,?)', (name, value))
+        conn.commit()
+        cur.close()
+
+        # Finally, update the class attribute for total account balance.
+        cls.unassigned_funds -= value
+
+
+
+
+
+
+
+
+
+
+    def delete_transaction(self):
+        pass
+
+    @classmethod
+    def display_transactions(cls):
+        pass
+
+    @staticmethod
+    def choose_transaction():
+        """This method is called anytime we need an instance of a transaction.
+        Once the user selects a transaction, we create an instance of it.
+        Then we can call instance methods on that transaction."""
+
+        # TODO: This method doesn't work yet - need to tweak more.
+
+        num_transactions = 0
+        transactions_dict = {}
+
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM Transactions")
+
+        while True:
+            try:
+                transactions_dict[num_transactions + 1] = cur.fetchone()[0]
+            except TypeError:
+                # cur.fetchone() returns None at the end of the query,
+                # which is non-subscriptable.
+                if num_transactions == 0:
+                    print(
+                        "\nYou have no transactions! You should add some!")
+                break
+            else:
+                if num_transactions == 0:
+                    print("\nWhich transaction do you want to select?")
+                num_transactions += 1
+                print("\t%s)" % num_transactions,
+                      transactions_dict[num_transactions])
+
+        if num_transactions > 0:
+            choice_number = input_validation(
+                "Enter the number in front of the transaction you wish to "
+                "select, or enter 0 to cancel: ",
+                int,
+                num_lb=0,
+                num_ub=num_transactions
+            )
+
+            if choice_number > 0:
+                # Create object instance and copy data into memory.
+                cur.execute("SELECT * FROM Transactions WHERE uid=?",
+                            (transactions_dict[choice_number][0],))
+                temp = cur.fetchall()[0]
+                selected_transaction = Transaction(
+                    uid=temp[0],
+                    account=temp[1],
+                    category=temp[2],
+                    amount=temp[3],
+                    payee=temp[4],
+                    date=temp[5],
+                    memo=temp[6]
+                    )
+                print("\nYou have selected the {} transaction.".format(
+                    selected_transaction.uid))
+                cur.close()
+                return selected_transaction
+
+        cur.close()
+        return None
+
+
+    def update_transaction_payee(self):
+        pass
+
+    def update_transaction_category(self):
+        pass
+
+    def update_transaction_account(self):
+        pass
+
+    def update_transaction_memo(self):
+        pass
+
+    def update_transaction_amount(self):
+        pass
+
+    def update_transaction_date(self):
+        pass
 
     @staticmethod
     def menu_for_transactions():
         """Provide user with information regarding the transactions menu then
          direct them to the appropriate functions."""
 
-        pass
-        # TODO: Build out transactions functions.
+        # TODO: This method doesn't work yet, needs some more tweaks.
+
+        print("\n~~You are now in the transactions menu.~~")
+        while True:
+            choice = recite_menu_options(TRANSACTION_MENU_OPTIONS)
+            if choice == 1:
+                Transaction.display_transactions()
+            elif choice == 2:
+                Transaction.new_transaction()
+            elif choice == 3:
+                instance = Transaction.choose_transaction()
+                if instance is not None:
+                    # Object instance is now in memory.
+                    # Present user with transaction instance menu.
+                    while True:
+                        # Display the selected transaction's attributes at the
+                        # top of the menu.
+                        output = "{}    ${:>,.2f}".format(
+                            instance.payee,
+                            instance.amount
+                        )
+                        print()
+                        print("-" * len(output))
+                        print(output)
+                        print("-" * len(output))
+                        choice2 = recite_menu_options(
+                            TRANSACTION_INSTANCE_OPTIONS)
+                        if choice2 == 1:
+                            instance.update_transaction_account()
+                        elif choice2 == 2:
+                            instance.update_transaction_category()
+                        elif choice2 == 3:
+                            instance.update_transaction_amount()
+                        elif choice2 == 4:
+                            instance.update_transaction_payee()
+                        elif choice2 == 5:
+                            instance.update_transaction_date()
+                        elif choice2 == 6:
+                            instance.update_transaction_memo()
+                        elif choice2 == 7:
+                                confirmation = instance.delete_transaction()
+                                if confirmation == 1:
+                                    break
+                        elif choice2 == 8:
+                            break
+
+            elif choice == 4:
+                break
 
 # ____________________________________________________________________________#
 
 
 class Account:
 
-    # TODO: Balance and Starting Balance should be two different attributes of each account instance. SB could be implemented as a transaction (like what YNAB does).
+    # TODO: Balance and Starting Balance should be two different attributes of each account instance. Alternatively, SB could be implemented as a transaction (like what YNAB does).
+    # TODO: Implement choose_account method and account_instance_menu, just like categories. Except don't include update_account_balance (until the design decision is determined).
 
     total_account_balance = 0
 
@@ -702,6 +943,7 @@ def main():
     navigate to get to all other parts."""
 
     # TODO replace 'cur.fetchall()[0][0]' with a better sqlite3 method.
+    # TODO: Instead of 'conn' being a global variable, make it a class attribute of some class (?)
 
     global conn
 
@@ -801,13 +1043,13 @@ def which_budget(user_budgets):
                         'balance REAL)'
                         )
             cur.execute('CREATE TABLE Transactions('
+                        'uid INTEGER,'
+                        'account TEXT,'
+                        'category TEXT,'
                         'amount REAL,'
                         'payee TEXT,'
-                        'category TEXT,'
-                        'memo TEXT,'
-                        'account TEXT,'
                         'date TEXT,'
-                        'UID INTEGER)'
+                        'memo TEXT)'
                         )
             cur.close()
             connection.commit()
@@ -859,6 +1101,8 @@ def which_budget(user_budgets):
 
 def recite_menu_options(list_of_options):
     """Present user with a series of options and make them choose one."""
+
+    # TODO: Above each menu, show the relevant info like how the category_instance_menu is currently. So show budget name above main menu, 'categories' above category_menu, etc.
 
     print("\nWhat would you like to do?")
     for i in range(len(list_of_options)):
