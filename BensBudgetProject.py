@@ -155,8 +155,7 @@ class Category:
         cls.unassigned_funds -= value
 
     def delete_category(self):
-        """Present user with list of existing categories, then delete
-        the one corresponding to the user's selection."""
+        """Ask user for confirmation before deleting, and then delete."""
 
         # TODO: Determine how to handle transactions which refer to the deleted category.
 
@@ -174,20 +173,15 @@ class Category:
 
         if confirmation == 1:
             # Delete the category.
+            Category.unassigned_funds += self.value
             cur = conn.cursor()
-
-            cur.execute("SELECT value FROM Categories WHERE name=?",
-                        (self.name,))
-            temp = cur.fetchall()[0][0]
-            Category.unassigned_funds += temp
-
             cur.execute("DELETE FROM Categories WHERE name=?",
                         (self.name,))
             conn.commit()
             print("\nYou have successfully deleted %s from your"
                   " list of categories." % self.name)
             cur.close()
-            return confirmation
+        return confirmation
 
     @classmethod
     def display_categories(cls):
@@ -196,6 +190,7 @@ class Category:
 
         # TODO: Use with statement to open and close the cursor.
         # TODO: Fix floating point errors for large numbers. Use "decimal" module?
+        # TODO: Categories may have negative balances - format these properly and alert the user.
 
         # Here is how to interpret the string format specifiers below:
         # Let's look at {:>#{pad2},.2f} as an example.
@@ -476,29 +471,6 @@ class Transaction:
         """Prompt the user to complete the fields and then create a transaction
         with that information."""
 
-        # TODO: Start by asking for amount and asking whether its an inflow or outflow. If inflow, allow for no category (just straight to unassigned funds).
-
-        #First verify that at least one account and category exist.
-        #Then ask the user to choose an account.
-            #Allow user to cancel via entering '0'.
-            #If account has $0, tell user and ask for another account (quitting remains an option).
-        #Then ask for a category.
-            #Continue to allow user to cancel via entering '0'.
-            #If category has $0, tell user and ask for another category (quitting remains an option).
-        #Then ask for an amount.
-            #Continue to allow user to cancel via entering a blank line.
-            #Confirm that the amount chosen is less than both the account balance and the category value.
-                #Otherwise, tell user to try again (quitting remains an option).
-        #Then ask for a payee
-        #Then ask for a date? Maybe not yet...
-        #Then ask for a memo? Myabe not yet...
-        #Now create a UID (random number generator that checks list of existing UIDs?).
-        #Query into the database and commit.
-        #Update the account's balance.
-        #Update the category's value.
-
-
-
         # Verify that at least one account and at least one category exist.
         cur = conn.cursor()
         cur.execute("SELECT name, balance FROM Accounts")
@@ -523,8 +495,56 @@ class Transaction:
         instance = Transaction(None, None, None, None, None, None, None)
 
 
+        # Determine whether transaction is an inflow or an outflow.
+        output = "\nWhat type of transaction is this?\n1) Income\n2) Expense"
+        print(output)
+        output = "Enter the corresponding number of your answer, or" \
+                 " enter 0 to cancel: "
+        is_expense = input_validation(
+            output,
+            int,
+            num_lb=0,
+            num_ub=2
+        )
+        if is_expense == 0:
+            # User wants to cancel.
+            print("\nCanceling this transaction.")
+            cur.close()
+            return
+        # Map the input value for is_expense to True (1) or False (0).
+        is_expense -= 1
+        if is_expense:
+            print("\nTransaction type: Expense")
+        else:
+            print("\nTransaction type: Income")
+
+
+        # Ask user to choose an amount.
+        output = "What is the amount of this transaction?" \
+                 " Enter a blank line to cancel: "
+        amount = input_validation(
+            output,
+            float,
+            num_lb=0,
+            empty_string_allowed=True
+        )
+        if amount == '':
+            # User wants to cancel.
+            print("\nCanceling this transaction.")
+            cur.close()
+            return
+        # Amount is valid, but may have extra decimal places (beyond 2).
+        amount = round(amount, 2)
+        output = "Amount entered: ${:,.2f}".format(amount)
+        print("\n%s" % output)
+        if is_expense:
+            instance.amount = amount * -1
+        else:
+            instance.amount = amount
+
+
         # Ask user to choose an account.
-        print("\nChoose an account to fund this transaction with.")
+        print("Choose an account to fund this transaction with.")
         for i in range(len(account_list)):
             print("\t%d)" % (i + 1), account_list[i][0])
         output = "Enter the number in front of the account you want " \
@@ -537,6 +557,7 @@ class Transaction:
             )
         if account_num == 0:
             # User wants to cancel.
+            print("\nCanceling this transaction.")
             cur.close()
             return
         else:
@@ -547,87 +568,48 @@ class Transaction:
 
 
         # Ask user to choose a category.
-        print("Assign a category to this transaction.")
-        for i in range(len(category_list)):
-            print("\t%d)" % (i + 1), category_list[i][0])
-        output = "Enter the number in front of the category you want " \
-                 "to select, or enter 0 to cancel: "
-        category_num = input_validation(
-            output,
-            int,
-            num_lb=0,
-            num_ub=len(category_list)
-            )
-        if category_num == 0:
-            # User wants to cancel.
-            cur.close()
-            return
-        else:
-            output = "\nCategory selected: {}".format(
-                category_list[category_num-1][0])
+        assign_category = True
+        if not is_expense:
+            # Category is optional.
+            output = "Since this is an income transaction, assigning" \
+                     " a category to it is optional."
             print(output)
-            instance.category = category_list[category_num-1][0]
-
-
-        # Ask user to choose an amount.
-        output = "What is the amount for this transaction? Enter a" \
-                 " positive number for outflows, or a negative number" \
-                 " for inflows, or a blank line to cancel: "
-        amount = input_validation(
-            output,
-            float,
-            empty_string_allowed=True
+            output = "Would you like to assign a category to this" \
+                     " transaction? Enter 1 for 'Yes' and 0 for 'No': "
+            assign_category = input_validation(
+                output,
+                int,
+                num_lb=0,
+                num_ub=1
             )
-        if amount == '':
-            # User wants to cancel.
-            print("\nCanceling this transaction.")
-            cur.close()
-            return
-
-        # Amount is valid, but may have extra decimal places (beyond 2).
-        amount = round(amount, 2)
-
-        if amount <= 0:
-            # User entered either $0 or an inflow, no constraints.
-            output = "Amount: ${:,.2f}".format(amount)
-            print("\n%s" % output)
-            instance.amount = amount
-        else:
-            # User entered an outflow.
-            if account_list[account_num-1][1] < amount:
-                # The selected account's balance is too low.
-                out = "The {} account's balance is too low (${:,.2f})".format(
-                    account_list[account_num-1][0],
-                    account_list[account_num-1][1]
-                    )
-                print("\n%s" % out)
-                output = "Select another account or add more money to" \
-                         " this account, and then try again."
-                print(output)
-                cur.close()
-                return
-            elif category_list[category_num-1][1] < amount:
-                # The selected category's balance is too low.
-                output = "The {} category's balance is too low (${})".format(
-                    category_list[category_num-1][0],
-                    category_list[category_num-1][1]
-                    )
-                print("\n%s" % output)
-                output = "Select another category or add more money to" \
-                         " this category, and then try again."
-                print(output)
+        if assign_category:
+            print("Assign a category to this transaction.")
+            for i in range(len(category_list)):
+                print("\t%d)" % (i + 1), category_list[i][0])
+            output = "Enter the number in front of the category you want " \
+                     "to select, or enter 0 to cancel: "
+            category_num = input_validation(
+                output,
+                int,
+                num_lb=0,
+                num_ub=len(category_list)
+                )
+            if category_num == 0:
+                # User wants to cancel.
+                print("\nCanceling this transaction.")
                 cur.close()
                 return
             else:
-                # Amount is approved.
-                output = "Amount entered: ${:,.2f}".format(amount)
-                print("\n%s" % output)
-                instance.amount = amount
+                output = "\nCategory selected: {}".format(
+                    category_list[category_num-1][0])
+                print(output)
+                instance.category = category_list[category_num-1][0]
 
 
         # Ask the user to select a payee.
         # Ask the user to select a date.
         # Ask the user to add a memo (optional).
+
 
         # Now assign a UID to the transaction.
         cur.execute("SELECT MAX(uid) FROM Transactions")
@@ -651,31 +633,82 @@ class Transaction:
         conn.commit()
 
 
-        # Update the category's value & the account's balance in the database.
-        cur.execute("SELECT value FROM Categories WHERE name=?",
-                    (instance.category,))
-        temp = cur.fetchall()[0][0]
-        cur.execute("UPDATE Categories SET value=? WHERE name=?",
-                    (temp - instance.amount, instance.category))
-        conn.commit()
+        # Update the category's value (or unassigned_funds value).
+        if instance.category is not None:
+            cur.execute("SELECT value FROM Categories WHERE name=?",
+                        (instance.category,))
+            temp = cur.fetchall()[0][0]
+            cur.execute("UPDATE Categories SET value=? WHERE name=?",
+                        (temp + instance.amount, instance.category))
+            conn.commit()
+        else:
+            # Since the transaction doesn't deduct funds from any category,
+            # it must instead deduct funds from unassigned_funds.
+            Category.unassigned_funds += instance.amount
 
+
+        # Update the account's value, as well as total_account_balance.
         cur.execute("SELECT balance FROM Accounts WHERE name=?",
                     (instance.account,))
         temp = cur.fetchall()[0][0]
         cur.execute('UPDATE Accounts SET balance=? WHERE name=?',
-                    (temp - instance.amount, instance.account))
+                    (temp + instance.amount, instance.account))
         conn.commit()
+        Account.total_account_balance += instance.amount
+
+
+        # Inform the user of success.
+        print("Your transaction has been successfully added!")
         cur.close()
 
 
-        # Finally, update the class attributes for total account balance.
-        Account.total_account_balance -= instance.amount
-
-        # Inform the user of success.
-        print("\nYour transaction has been successfully added!")
-
     def delete_transaction(self):
-        pass
+        """Ask user for confirmation before deleting, and then delete."""
+
+        # TODO: Currently shows uid at the end, show different attribute(s) instead?
+
+        # Ask the user to confirm that the transaction should be deleted.
+        # If yes, then delete it.
+        output = "Are you sure that you want to delete this transaction?" \
+               " Enter 1 for yes, 0 for no: "
+
+        confirmation = input_validation(
+            output,
+            int,
+            num_lb=0,
+            num_ub=1
+            )
+
+        if confirmation:
+            # Delete the transaction.
+            cur = conn.cursor()
+            cur.execute("SELECT balance FROM Accounts WHERE name=?",
+                        (self.account,))
+            temp = cur.fetchall()[0][0]
+            cur.execute("UPDATE Accounts SET balance=? WHERE name=?",
+                        (temp - self.amount, self.account))
+            conn.commit()
+            Account.total_account_balance -= self.amount
+
+            if self.category is None:
+                # Funds were originally taken from unassigned_funds.
+                Category.unassigned_funds -= self.amount
+            else:
+                # Funds were originally taken from self.category.
+                cur.execute("SELECT value FROM Categories WHERE name=?",
+                            (self.category,))
+                temp = cur.fetchall()[0][0]
+                cur.execute("UPDATE Categories SET value=? WHERE name=?",
+                            (temp - self.amount, self.category))
+                conn.commit()
+
+            cur.execute("DELETE FROM Transactions WHERE uid=?",
+                        (self.uid,))
+            conn.commit()
+            print("\nYou have successfully deleted %s from your"
+                  " list of transactions." % self.uid)
+            cur.close()
+        return confirmation
 
     @staticmethod
     def display_transactions():
@@ -687,7 +720,7 @@ class Transaction:
         Once the user selects a transaction, we create an instance of it.
         Then we can call instance methods on that transaction."""
 
-        # TODO: This method doesn't work yet - need to tweak more.
+        # TODO: Currently shows only uid, change to a different attribute(s)
 
         num_transactions = 0
         transactions_dict = {}
@@ -724,7 +757,7 @@ class Transaction:
             if choice_number > 0:
                 # Create object instance and copy data into memory.
                 cur.execute("SELECT * FROM Transactions WHERE uid=?",
-                            (transactions_dict[choice_number][0],))
+                            (transactions_dict[choice_number],))
                 temp = cur.fetchall()[0]
                 selected_transaction = Transaction(
                     uid=temp[0],
@@ -767,7 +800,7 @@ class Transaction:
         """Provide user with information regarding the transactions menu then
          direct them to the appropriate functions."""
 
-        # TODO: This method doesn't work yet, needs some more tweaks.
+        # TODO: Change the 'header' information at the top of the transaction_instance menu.
 
         print("\n~~You are now in the transactions menu.~~")
         while True:
@@ -785,7 +818,7 @@ class Transaction:
                         # Display the selected transaction's attributes at the
                         # top of the menu.
                         output = "{}    ${:>,.2f}".format(
-                            instance.payee,
+                            instance.account,
                             instance.amount
                         )
                         print()
@@ -812,7 +845,8 @@ class Transaction:
                                     break
                         elif choice2 == 8:
                             break
-
+                    print("\n~~You are now returning to the "
+                          "transaction menu.~~")
             elif choice == 4:
                 break
 
@@ -834,6 +868,8 @@ class Account:
     def new_account(cls):
         """Prompt the user for a name and a number, then create an account
          with that name and balance."""
+
+        #TODO: Implement starting account balance as a transaction. Automatically set payee as "Starting Balance"
 
         while True:
             name = input_validation(
@@ -888,6 +924,7 @@ class Account:
          corresponding to the user's selection."""
 
         # TODO: Only let users delete accounts with zero transactions (prompt them to handle those transactions themselves).
+        # TODO: Allow deleting accounts even when it would cause unassigned_funds to become negative (?)
 
         num_accounts = 0
         # account_dict maps the user-supplied integer to an account record.
@@ -963,6 +1000,8 @@ class Account:
 
         # TODO: Use with statement to open and close the cursor.
         # TODO: Fix floating point errors for large numbers. Use "decimal" module?
+        # TODO: Accounts may have negative balances - format these properly and alert the user.
+
 
         # Here is how to interpret the string format specifiers below:
         # Let's look at {:>#{pad2},.2f} as an example.
