@@ -82,6 +82,8 @@ TRANSACTION_INSTANCE_OPTIONS = ["edit the transaction's account,",
 
 class Category:
 
+    # unassigned_funds is not ever allowed to become negative.
+    # This is enforced by not allowing accounts to have negative balances.
     unassigned_funds = 0
 
     def __init__(self, name, value):
@@ -91,7 +93,8 @@ class Category:
     @classmethod
     def new_category(cls):
         """Prompt the user for a name and then create a category with that
-        name."""
+        name. User can't enter a negative value in this method, but some
+        transactions can make the value negative."""
 
         cur = conn.cursor()
         while True:
@@ -132,11 +135,10 @@ class Category:
                 float,
                 num_lb=0,
                 num_ub=cls.unassigned_funds
-            )
-
+                )
             # value is valid, but may have extra decimal places (beyond 2).
             value = round(value, 2)
-            print("\n${:,.2f} has been added to {}".format(value, name))
+            print("\n${:,.2f} has been added to {}.".format(value, name))
 
         else:
             # Unassigned funds = 0, so value must also be set to 0.
@@ -153,6 +155,8 @@ class Category:
 
         # Finally, update the class attribute for total account balance.
         cls.unassigned_funds -= value
+
+        press_key_to_continue()
 
     def delete_category(self):
         """Ask user for confirmation before deleting, and then delete."""
@@ -181,6 +185,7 @@ class Category:
             print("\nYou have successfully deleted %s from your"
                   " list of categories." % self.name)
             cur.close()
+            press_key_to_continue()
         return confirmation
 
     @classmethod
@@ -190,14 +195,14 @@ class Category:
 
         # TODO: Use with statement to open and close the cursor.
         # TODO: Fix floating point errors for large numbers. Use "decimal" module?
-        # TODO: Categories may have negative balances - format these properly and alert the user.
+        # TODO: If categories have negative balances, alert the user.
 
         # Here is how to interpret the string format specifiers below:
         # Let's look at {:>#{pad2},.2f} as an example.
         # The ':' means the following characters are 'format_specs'.
         # The '>' means right-justified.
         # The '{pad2}' is a nested format specifier.
-        #   Here it simply contains a variable.
+        #   Here it contains a variable for the total number of characters.
         # The ',' groups the digits into sets of 3, separated by a comma.
         # The '.2f' means show two digits after the decimal place.
         #   Note that the 'f' in '.2f' specifies fixed point.
@@ -211,34 +216,37 @@ class Category:
             # The Categories table contains no data
             print("\nYou have no categories! You should make some!")
             cur.close()
+            press_key_to_continue()
             return
 
         # Now determine the longest name and balance (when printed).
         max_name_length = 16        # 16 is the length of "Unassigned Funds".
-        unassigned_funds_string = "{:,.2f}".format(cls.unassigned_funds)
-        max_balance_length = len(unassigned_funds_string)
-
+        max_balance_length = len("{:,.2f}".format(abs(cls.unassigned_funds)))
         for category in instance_list:
             if len(category.name) > max_name_length:
                 max_name_length = len(category.name)
-            balance_str = "{:,.2f}".format(category.value)
-            if len(balance_str) > max_balance_length:
-                max_balance_length = len(balance_str)
+            instance_balance = "{:,.2f}".format(abs(category.value))
+            if len(instance_balance) > max_balance_length:
+                max_balance_length = len(instance_balance)
 
         # Print each category row by row.
         print("\nHere are your categories and their values:")
         for category in instance_list:
-            output = "{:{pad1}}    ${:>{pad2},.2f}".format(
+            minus = "   -$" if category.value < 0 else "    $"
+            output = "{:{pad1}}{}{:>{pad2},.2f}".format(
                 category.name,
-                category.value,
+                minus,
+                abs(category.value),
                 pad1=max_name_length,
-                pad2=max_balance_length
+                pad2=max_balance_length,
                 )
             print("\t%s" % output)
 
         # Finally, display the unassigned funds.
-        final_line_output = "{:{pad1}}    ${:>{pad2},.2f}".format(
+        minus = "   -$" if cls.unassigned_funds < 0 else "    $"
+        final_line_output = "{:{pad1}}{}{:>{pad2},.2f}".format(
             "Unassigned Funds",
+            minus,
             cls.unassigned_funds,
             pad1=max_name_length,
             pad2=max_balance_length)
@@ -246,6 +254,8 @@ class Category:
         print("\t%s" % final_line_output)
 
         cur.close()
+        print()
+        press_key_to_continue()
 
     @staticmethod
     def choose_category():
@@ -268,6 +278,7 @@ class Category:
                 if num_categories == 0:
                     print(
                         "\nYou have no categories! You should make some!")
+                    press_key_to_continue()
                 break
             else:
                 if num_categories == 0:
@@ -294,9 +305,10 @@ class Category:
                     name=temp[0],
                     value=temp[1]
                     )
-                cur.close()
                 print("\nYou have selected the {} category.".format(
                     selected_category.name))
+                cur.close()
+                press_key_to_continue()
                 return selected_category
 
         cur.close()
@@ -324,8 +336,9 @@ class Category:
 
             if name == self.name:
                 # User typed the same name as what the category already has.
-                print("\nCategory name will remain {}".format(self.name))
+                print("\nCategory name will remain {}.".format(self.name))
                 cur.close()
+                press_key_to_continue()
                 return
 
             cur.execute("SELECT name FROM Categories WHERE name=?", (name,))
@@ -352,35 +365,47 @@ class Category:
             )
         print("\n%s" % output)
         self.name = name
+        press_key_to_continue()
 
     def update_category_value(self):
         """Given a Category instance, allow user to update the instance's
          value."""
 
-        output = "Your {} category currently has a value of ${:,.2f}.".format(
+        minus = "-$" if self.value < 0 else "$"
+
+        output = "Your {} category currently has a value of {}{:,.2f}.".format(
             self.name,
-            self.value)
+            minus,
+            abs(self.value)
+            )
         print("\n%s" % output)
-        output = "Your total amount of unassigned funds is ${:,.2f}".format(
+        output = "Your total amount of unassigned funds is ${:,.2f}.".format(
             Category.unassigned_funds)
         print(output)
 
         # In the special case where both the category and the unassigned
         # funds have $0, don't make user enter any input.
-        if Category.unassigned_funds == 0 and self.value == 0:
-            print("Since these are both $0.00, you can't update the value"
-                  " right now.")
+        if Category.unassigned_funds == 0 and self.value <= 0:
+            print("Since neither of these are positive, you can't update the "
+                  "value right now.")
+            press_key_to_continue()
             return
 
-        output = "Select an amount to add to the category's value "+\
-            "(negative amounts will be subtracted from the value): "
+        if self.value < 0:
+            lower = 0
+            output = "Select a positive amount to add to the " \
+                     "category's value: "
+        else:
+            lower = self.value*(-1)+0
+            output = "Select an amount to add to the category's value " \
+                     "(negative amounts will be subtracted from the value): "
 
         diff = input_validation(
             output,
             float,
-            num_lb=self.value*(-1)+0,
+            num_lb=lower,
             num_ub=Category.unassigned_funds
-        )
+            )
 
         # Update the class attributes
         self.value += diff
@@ -404,13 +429,14 @@ class Category:
 
         print("\n%s" % output)
         cur.close()
+        press_key_to_continue()
 
     @staticmethod
     def menu_for_categories():
         """Provide user with information regarding the category menu then
         direct them to the appropriate functions."""
 
-        # TODO Within Category_instance_menu, add option to view transactions associated with the selected category.
+        # TODO: Within Category_instance_menu, add option to view transactions associated with the selected category.
         # TODO: Within Category_instance_menu, add option to create a new transaction with that category.
 
         print("\n~~You are now in the categories menu.~~")
@@ -428,9 +454,11 @@ class Category:
                     while True:
                         # Display the selected Category's attributes at the
                         # top of the menu.
-                        output = "{}    ${:>,.2f}".format(
+                        minus = "   -$" if instance.value < 0 else "    $"
+                        output = "{}{}{:>,.2f}".format(
                                 instance.name,
-                                instance.value
+                                minus,
+                                abs(instance.value)
                                 )
                         print()
                         print("-"*len(output))
@@ -469,7 +497,9 @@ class Transaction:
     @staticmethod
     def new_transaction():
         """Prompt the user to complete the fields and then create a transaction
-        with that information."""
+        with that information. By design, this method does not restrict the
+        user from entering any amount, even if the category's value and/or the
+        account's balance would become negative."""
 
         # Verify that at least one account and at least one category exist.
         cur = conn.cursor()
@@ -481,6 +511,7 @@ class Transaction:
                      " at least one account and at least one category."
             print("\n%s" % output)
             cur.close()
+            press_key_to_continue()
             return
         cur.execute("SELECT name, value FROM Categories")
         category_list = cur.fetchall()
@@ -490,13 +521,15 @@ class Transaction:
                      " at least one account and at least one category."
             print("\n%s" % output)
             cur.close()
+            press_key_to_continue()
             return
         # Instantiate the Transactions class, to be filled in piece by piece.
         instance = Transaction(None, None, None, None, None, None, None)
 
 
         # Determine whether transaction is an inflow or an outflow.
-        output = "\nWhat type of transaction is this?\n1) Income\n2) Expense"
+        output = "\nWhat type of transaction is this?" \
+                 "\n\t1) Income\n\t2) Expense"
         print(output)
         output = "Enter the corresponding number of your answer, or" \
                  " enter 0 to cancel: "
@@ -509,6 +542,7 @@ class Transaction:
         if is_expense == 0:
             # User wants to cancel.
             print("\nCanceling this transaction.")
+            press_key_to_continue()
             cur.close()
             return
         # Map the input value for is_expense to True (1) or False (0).
@@ -532,6 +566,7 @@ class Transaction:
             # User wants to cancel.
             print("\nCanceling this transaction.")
             cur.close()
+            press_key_to_continue()
             return
         # Amount is valid, but may have extra decimal places (beyond 2).
         amount = round(amount, 2)
@@ -559,6 +594,7 @@ class Transaction:
             # User wants to cancel.
             print("\nCanceling this transaction.")
             cur.close()
+            press_key_to_continue()
             return
         else:
             output = "\nAccount selected: {}".format(
@@ -598,6 +634,7 @@ class Transaction:
                 # User wants to cancel.
                 print("\nCanceling this transaction.")
                 cur.close()
+                press_key_to_continue()
                 return
             else:
                 output = "\nCategory selected: {}".format(
@@ -660,12 +697,14 @@ class Transaction:
         # Inform the user of success.
         print("Your transaction has been successfully added!")
         cur.close()
+        press_key_to_continue()
 
 
     def delete_transaction(self):
         """Ask user for confirmation before deleting, and then delete."""
 
-        # TODO: Currently shows uid at the end, show different attribute(s) instead?
+        # TODO: Currently shows uid at the end, show different attribute(s) instead.
+        # TODO: When deleting transactions whose amounts are positive, need to worry about account balance going negative? What about unassigned_funds?
 
         # Ask the user to confirm that the transaction should be deleted.
         # If yes, then delete it.
@@ -708,6 +747,7 @@ class Transaction:
             print("\nYou have successfully deleted %s from your"
                   " list of transactions." % self.uid)
             cur.close()
+            press_key_to_continue()
         return confirmation
 
     @staticmethod
@@ -737,6 +777,7 @@ class Transaction:
                 if num_transactions == 0:
                     print(
                         "\nYou have no transactions! You should add some!")
+                    press_key_to_continue()
                 break
             else:
                 if num_transactions == 0:
@@ -771,6 +812,7 @@ class Transaction:
                 print("\nYou have selected the {} transaction.".format(
                     selected_transaction.uid))
                 cur.close()
+                press_key_to_continue()
                 return selected_transaction
 
         cur.close()
@@ -817,10 +859,13 @@ class Transaction:
                     while True:
                         # Display the selected transaction's attributes at the
                         # top of the menu.
-                        output = "{}    ${:>,.2f}".format(
-                            instance.account,
-                            instance.amount
-                        )
+                        output = "Payee: {}    Amount: ${:>,.2f}    " \
+                                 "Category: {}    Account: {}".format(
+                            instance.payee,
+                            instance.amount,
+                            instance.category,
+                            instance.account
+                            )
                         print()
                         print("-" * len(output))
                         print(output)
@@ -856,7 +901,8 @@ class Transaction:
 class Account:
 
     # TODO: Balance and Starting Balance should be two different attributes of each account instance. Alternatively, SB could be implemented as a transaction (like what YNAB does).
-    # TODO: Implement choose_account method and account_instance_menu, just like categories. Except don't include update_account_balance (until the design decision is determined).
+    # TODO: Implement choose_account method and account_instance_menu, just like categories. Except don't include update_account_balance (instead offer to create new transaction with this account).
+    # TODO: Accounts should never be allowed to have negative balances. This ensures that unassigned_funds is never negative. This program doesn't allow for credit cards!
 
     total_account_balance = 0
 
@@ -869,7 +915,7 @@ class Account:
         """Prompt the user for a name and a number, then create an account
          with that name and balance."""
 
-        #TODO: Implement starting account balance as a transaction. Automatically set payee as "Starting Balance"
+        # TODO: Implement starting account balance as a transaction. Automatically set payee as "Starting Balance"
 
         while True:
             name = input_validation(
@@ -901,7 +947,7 @@ class Account:
             "Please enter a starting account balance (must be non-negative): ",
             float,
             num_lb=0
-        )
+            )
 
         # Balance is valid, but may have extra decimal places (beyond 2).
         balance = round(balance, 2)
@@ -917,6 +963,7 @@ class Account:
         Category.unassigned_funds += balance
 
         print("\nOkay! You added a new account called %s to your list!" % name)
+        press_key_to_continue()
 
     @classmethod
     def delete_account(cls):
@@ -924,7 +971,7 @@ class Account:
          corresponding to the user's selection."""
 
         # TODO: Only let users delete accounts with zero transactions (prompt them to handle those transactions themselves).
-        # TODO: Allow deleting accounts even when it would cause unassigned_funds to become negative (?)
+        # TODO: Don't allow deleting accounts when it would cause unassigned_funds to become negative.
 
         num_accounts = 0
         # account_dict maps the user-supplied integer to an account record.
@@ -941,6 +988,7 @@ class Account:
                 # which is non-subscriptable.
                 if num_accounts == 0:
                     print("\nYou have no accounts! You should add some!")
+                    press_key_to_continue()
                 break
             else:
                 if num_accounts == 0:
@@ -991,6 +1039,7 @@ class Account:
                     print("\nYou have successfully deleted %s from your list"
                           " of accounts." % account_dict[choice_number])
 
+                press_key_to_continue()
         cur.close()
 
     @classmethod
@@ -1000,8 +1049,6 @@ class Account:
 
         # TODO: Use with statement to open and close the cursor.
         # TODO: Fix floating point errors for large numbers. Use "decimal" module?
-        # TODO: Accounts may have negative balances - format these properly and alert the user.
-
 
         # Here is how to interpret the string format specifiers below:
         # Let's look at {:>#{pad2},.2f} as an example.
@@ -1022,6 +1069,7 @@ class Account:
             # The Accounts table contains no data
             print("\nYou have no accounts! You should add some!")
             cur.close()
+            press_key_to_continue()
             return
 
         # Now determine the longest name and balance (when printed).
@@ -1053,6 +1101,8 @@ class Account:
         print("\t%s" % final_line_output)
 
         cur.close()
+        print()
+        press_key_to_continue()
 
     @staticmethod
     def menu_for_accounts():
@@ -1236,6 +1286,7 @@ def which_budget(user_budgets):
             # Quit the program!
             exit_program()
 
+    press_key_to_continue()
     return connection
 
 # ____________________________________________________________________________#
@@ -1383,11 +1434,23 @@ def input_validation(
 # ____________________________________________________________________________#
 
 
+def press_key_to_continue():
+    """Prompts the user to hit a button before displaying the next menu."""
+    x = input("Press Enter to continue... ")
+    print()     # Prints a blank line.
+
+# ____________________________________________________________________________#
+
+
 def exit_program():
     """Exit the program gracefully (with exit code 0)."""
 
     print("\nThanks for using Ben's Budget Program. See you later!")
-    conn.close()
+    try:
+        conn.close()
+    except NameError:
+        # The variable conn was never set.
+        pass
     raise SystemExit
 
 # ____________________________________________________________________________#
@@ -1400,14 +1463,6 @@ if __name__ == "__main__":
 Here are ideas of next steps and features:
 -Add a Delete Existing Budget option to the top menu.
 -Implement some sense of time. Consider making the time frame variable, based on user input.
--Build out the transactions section of the program.
--Consider making a function that prompts the user "Press enter to continue" and doesn't continue until they do.
-    -Call this function every time they enter some input (after the immediate results of their input is shown to them.
-    -For example:
-        -the program prompts them for a menu item,
-        -they enter a number,
-        -the program tells them what the immediate result of their input is,
-        -the program calls this press_enter_to_continue function
 -Allow users to create their own subsets of categories (distinct from the idea of super-categories).
     -Allow users to see spending patterns/trends in just that subset.
 -Use regular expressions to check user input (and make sure it's valid).
@@ -1421,8 +1476,4 @@ Here are ideas of next steps and features:
     config files save user preferences ("configurations")
     Module: configparser
     ~/Library/Application Support/Bens Budget Program
--Design decision: How to implement each accounts' starting balance (SB)?
-    -YNAB creates a new transaction for the SB and puts "Starting Balance" as the Payee.
-        -This allows the user to delete that transaction if they wish.
-    -An alternative would be to have SB be its own attribute of Accounts, distinct from the cumulative balance (which is calculated from the SB and all transactions with that account).
 """
