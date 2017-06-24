@@ -35,6 +35,7 @@ CONFIG_DIRECTORY = os.path.expanduser(
 
 WHICH_BUDGET_MENU_OPTIONS = ["make a new budget,",
                              "load an existing budget,",
+                             "delete an existing budget,",
                              "quit the program."
                              ]
 
@@ -498,8 +499,9 @@ class Transaction:
     def new_transaction():
         """Prompt the user to complete the fields and then create a transaction
         with that information. By design, this method does not restrict the
-        user from entering any amount, even if the category's value and/or the
-        account's balance would become negative."""
+        user from entering an amount that would cause the category's value
+        to become negative, but it does restrict the user from entering an
+        amount that would cause the account's balance to become negative."""
 
         # Verify that at least one account and at least one category exist.
         cur = conn.cursor()
@@ -572,10 +574,7 @@ class Transaction:
         amount = round(amount, 2)
         output = "Amount entered: ${:,.2f}".format(amount)
         print("\n%s" % output)
-        if is_expense:
-            instance.amount = amount * -1
-        else:
-            instance.amount = amount
+        instance.amount = amount * -1 if is_expense else amount
 
 
         # Ask user to choose an account.
@@ -597,10 +596,23 @@ class Transaction:
             press_key_to_continue()
             return
         else:
-            output = "\nAccount selected: {}".format(
-                account_list[account_num-1][0])
-            print(output)
-            instance.account = account_list[account_num-1][0]
+            if abs(instance.amount) > account_list[
+                        account_num- 1][1] and is_expense == True:
+                output = "\nThe selected account's balance is too low" \
+                         " (${:,.2f}). Please add at least ${:,.2f} to the" \
+                         " account and then try again.".format(
+                    account_list[account_num- 1][1],
+                    abs(instance.amount) - account_list[account_num- 1][1])
+                print(output)
+                print("\nCanceling this transaction.")
+                cur.close()
+                press_key_to_continue()
+                return
+            else:
+                output = "\nAccount selected: {}".format(
+                    account_list[account_num-1][0])
+                print(output)
+                instance.account = account_list[account_num-1][0]
 
 
         # Ask user to choose a category.
@@ -651,10 +663,8 @@ class Transaction:
         # Now assign a UID to the transaction.
         cur.execute("SELECT MAX(uid) FROM Transactions")
         uid_max = cur.fetchall()
-        if uid_max[0][0] == None:
-            instance.uid = 1
-        else:
-            instance.uid = uid_max[0][0] + 1
+        instance.uid = 1 if uid_max[0][0] == None else uid_max[0][0] + 1
+
 
         # It's finally time to add this record to the database.
         cur.execute('INSERT INTO Transactions VALUES(?,?,?,?,?,?,?)', (
@@ -971,7 +981,6 @@ class Account:
          corresponding to the user's selection."""
 
         # TODO: Only let users delete accounts with zero transactions (prompt them to handle those transactions themselves).
-        # TODO: Don't allow deleting accounts when it would cause unassigned_funds to become negative.
 
         num_accounts = 0
         # account_dict maps the user-supplied integer to an account record.
@@ -1269,10 +1278,7 @@ def which_budget(user_budgets):
                     num_ub=len(list_of_budgets)
                 )
 
-                if budget_number == 0:
-                    # User wants to cancel. Loop to top of this function.
-                    continue
-                else:
+                if budget_number > 0:
                     # Load the budget that corresponds to the number
                     # the user entered.
                     connection = sqlite3.connect(
@@ -1283,6 +1289,45 @@ def which_budget(user_budgets):
                     break
 
         if choice == 3:
+            # User wants to delete an existing budget.
+            list_of_budgets = glob.glob(
+                "%s/*.db" % user_budgets)  # Pull up list of available budgets.
+            if len(list_of_budgets) == 0:
+                print("\nThere are no existing budgets. "
+                      "You should make a new one!")
+            else:
+                print("\nWhich budget would you like to delete?")
+                for i in range(len(list_of_budgets)):
+                    print("\t%d)" % (i + 1), os.path.splitext(
+                        os.path.basename(list_of_budgets[i]))[0])
+                budget_number = input_validation(
+                    "Enter the number in front of the budget you wish to"
+                    " delete, or enter 0 to cancel: ",
+                    int,
+                    num_lb=0,
+                    num_ub=len(list_of_budgets)
+                )
+
+                if budget_number > 0:
+                    # Ask the user to confirm their choice.
+                    selected_budget = os.path.splitext(os.path.basename(
+                            list_of_budgets[budget_number - 1]))[0]
+                    output = "Are you sure you want to delete {}? Press 1" \
+                             " for yes, 0 for no: ".format(selected_budget)
+                    confirmation = input_validation(
+                        output,
+                        int,
+                        num_lb=0,
+                        num_ub=1
+                    )
+                    if confirmation:
+                        # Delete the budget that corresponds to the number
+                        # the user entered.
+                        os.remove(list_of_budgets[budget_number-1])
+                        print("\nBudget deleted: {}".format(selected_budget))
+                        press_key_to_continue()
+
+        if choice == 4:
             # Quit the program!
             exit_program()
 
@@ -1436,7 +1481,7 @@ def input_validation(
 
 def press_key_to_continue():
     """Prompts the user to hit a button before displaying the next menu."""
-    x = input("Press Enter to continue... ")
+    input("Press Enter to continue... ")
     print()     # Prints a blank line.
 
 # ____________________________________________________________________________#
@@ -1461,7 +1506,6 @@ if __name__ == "__main__":
 
 """
 Here are ideas of next steps and features:
--Add a Delete Existing Budget option to the top menu.
 -Implement some sense of time. Consider making the time frame variable, based on user input.
 -Allow users to create their own subsets of categories (distinct from the idea of super-categories).
     -Allow users to see spending patterns/trends in just that subset.
@@ -1476,4 +1520,8 @@ Here are ideas of next steps and features:
     config files save user preferences ("configurations")
     Module: configparser
     ~/Library/Application Support/Bens Budget Program
+-How restricted should the user be regarding entering in transaction amounts?
+    -Answer: Let the user decide! Make it a configuration thing.
+        -Add a settings/configurations/properties/preferences menu.
+    -For now, default to letting categories go negative, but not accounts.
 """
