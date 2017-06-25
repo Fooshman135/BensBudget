@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/python3
 
 """
 Ben Katz coding sample.
@@ -27,6 +27,8 @@ Thank you for your consideration.
 import os
 import sqlite3
 import glob
+from datetime import date as dt
+import re
 
 # Bash uses ~ to mean the home directory, but Python doesn't know that.
 # That's why we use os.path.expanduser() in the following command.
@@ -162,24 +164,42 @@ class Category:
     def delete_category(self):
         """Ask user for confirmation before deleting, and then delete."""
 
-        # TODO: Determine how to handle transactions which refer to the deleted category.
+        # First check to see if there are any transactions for this category.
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM Transactions WHERE Category=?",
+                    (self.name,))
+        temp = cur.fetchone()[0]
+        if temp > 0:
+            # There are transactions assigned to this category.
+            if temp == 1:
+                output = "There is 1 transaction assigned to {}. Reassign" \
+                         " that transaction to another category or delete" \
+                         " it, and then try again.".format(self.name)
+            else:
+                output = "There are {} transactions assigned to {}. Reassign" \
+                        " those transactions to other categories or delete" \
+                         " them, and then try again.".format(
+                            temp,
+                            self.name
+                            )
+            print("\n%s" % output)
+            cur.close()
+            press_key_to_continue()
+            confirmation = 0
+            return confirmation
 
         # Ask the user to confirm that the category should be deleted.
-        # If yes, then delete it.
         text = "Are you sure that you want to delete the {} category? ".format(
                 self.name)
-
         confirmation = input_validation(
             text+"Enter 1 for yes, 0 for no: ",
             int,
             num_lb=0,
             num_ub=1
         )
-
         if confirmation == 1:
             # Delete the category.
             Category.unassigned_funds += self.value
-            cur = conn.cursor()
             cur.execute("DELETE FROM Categories WHERE name=?",
                         (self.name,))
             conn.commit()
@@ -550,9 +570,9 @@ class Transaction:
         # Map the input value for is_expense to True (1) or False (0).
         is_expense -= 1
         if is_expense:
-            print("\nTransaction type: Expense")
+            print("\nTransaction type: Expense.")
         else:
-            print("\nTransaction type: Income")
+            print("\nTransaction type: Income.")
 
 
         # Ask user to choose an amount.
@@ -572,7 +592,7 @@ class Transaction:
             return
         # Amount is valid, but may have extra decimal places (beyond 2).
         amount = round(amount, 2)
-        output = "Amount entered: ${:,.2f}".format(amount)
+        output = "Amount entered: ${:,.2f}.".format(amount)
         print("\n%s" % output)
         instance.amount = amount * -1 if is_expense else amount
 
@@ -609,7 +629,7 @@ class Transaction:
                 press_key_to_continue()
                 return
             else:
-                output = "\nAccount selected: {}".format(
+                output = "\nAccount selected: {}.".format(
                     account_list[account_num-1][0])
                 print(output)
                 instance.account = account_list[account_num-1][0]
@@ -623,7 +643,7 @@ class Transaction:
                      " a category to it is optional."
             print(output)
             output = "Would you like to assign a category to this" \
-                     " transaction? Enter 1 for 'Yes' and 0 for 'No': "
+                     " transaction? Enter 1 for 'Yes', 0 for 'No': "
             assign_category = input_validation(
                 output,
                 int,
@@ -649,15 +669,59 @@ class Transaction:
                 press_key_to_continue()
                 return
             else:
-                output = "\nCategory selected: {}".format(
+                output = "\nCategory selected: {}.".format(
                     category_list[category_num-1][0])
                 print(output)
                 instance.category = category_list[category_num-1][0]
+        else:
+            print()
 
 
         # Ask the user to select a payee.
+        output = "Who is the payee for this transaction? Enter a blank" \
+                 " line to cancel: "
+        payee = input_validation(
+            output,
+            str,
+            is_titlecased=True,
+            empty_string_allowed=True
+            )
+        if payee == '':
+            # User wants to cancel.
+            print("\nCanceling this transaction.")
+            cur.close()
+            press_key_to_continue()
+            return
+        print("\nPayee entered: {}.".format(payee))
+        instance.payee = payee
+
+
         # Ask the user to select a date.
+        output = "Enter a date for this transaction (MM/DD/YYYY), or a" \
+                 " blank line to cancel: "
+        date = input_validation(
+            output,
+            dt,
+            empty_string_allowed=True
+            )
+        if date == '':
+            # User wants to cancel.
+            print("\nCanceling this transaction.")
+            cur.close()
+            press_key_to_continue()
+            return
+        print("\nDate entered: {}.".format(date.strftime("%m/%d/%Y")))
+        instance.date = date
+
+
         # Ask the user to add a memo (optional).
+        output = "Add an (optional) memo here: "
+        memo = input_validation(
+            output,
+            str,
+            empty_string_allowed=True
+            )
+        instance.memo = memo
 
 
         # Now assign a UID to the transaction.
@@ -705,7 +769,7 @@ class Transaction:
 
 
         # Inform the user of success.
-        print("Your transaction has been successfully added!")
+        print("\nYour transaction has been successfully added!")
         cur.close()
         press_key_to_continue()
 
@@ -714,33 +778,55 @@ class Transaction:
         """Ask user for confirmation before deleting, and then delete."""
 
         # TODO: Currently shows uid at the end, show different attribute(s) instead.
-        # TODO: When deleting transactions whose amounts are positive, need to worry about account balance going negative? What about unassigned_funds?
 
-        # Ask the user to confirm that the transaction should be deleted.
-        # If yes, then delete it.
-        output = "Are you sure that you want to delete this transaction?" \
-               " Enter 1 for yes, 0 for no: "
+        cur = conn.cursor()
+        cur.execute("SELECT balance FROM Accounts WHERE name=?",
+                    (self.account,))
+        temp = cur.fetchall()[0][0]
+        if temp < self.amount:
+            # Account balance would become negative, not allowed.
+            output = "Deleting this transaction would cause the {}" \
+                     " account's balance to become negative. Try again" \
+                     " once at least ${:,.2f} is added to the account's" \
+                     " current balance.".format(
+                        self.account,
+                        abs(temp - self.amount)
+                        )
+            print("\n%s" % output)
+            press_key_to_continue()
+            confirmation = 0
 
-        confirmation = input_validation(
-            output,
-            int,
-            num_lb=0,
-            num_ub=1
-            )
+        elif self.category is None and Category.unassigned_funds < self.amount:
+            # unassigned_funds would become negative, not allowed.
+            output = "Deleting this transaction would cause the Unassigned" \
+                     " Funds to become negative. Try again once at least" \
+                     " ${:,.2f}  is added to the Unassigned Funds.".format(
+                        abs(Category.unassigned_funds - self.amount)
+                        )
+            print("\n%s" % output)
+            press_key_to_continue()
+            confirmation = 0
+
+        else:
+            # Ask the user to confirm that the transaction should be deleted.
+            output = "Are you sure that you want to delete this transaction?" \
+                   " Enter 1 for yes, 0 for no: "
+            confirmation = input_validation(
+                output,
+                int,
+                num_lb=0,
+                num_ub=1
+                )
 
         if confirmation:
             # Delete the transaction.
-            cur = conn.cursor()
-            cur.execute("SELECT balance FROM Accounts WHERE name=?",
-                        (self.account,))
-            temp = cur.fetchall()[0][0]
             cur.execute("UPDATE Accounts SET balance=? WHERE name=?",
                         (temp - self.amount, self.account))
             conn.commit()
             Account.total_account_balance -= self.amount
 
             if self.category is None:
-                # Funds were originally taken from unassigned_funds.
+                # Funds were originally added to unassigned_funds (income).
                 Category.unassigned_funds -= self.amount
             else:
                 # Funds were originally taken from self.category.
@@ -756,8 +842,9 @@ class Transaction:
             conn.commit()
             print("\nYou have successfully deleted %s from your"
                   " list of transactions." % self.uid)
-            cur.close()
             press_key_to_continue()
+
+        cur.close()
         return confirmation
 
     @staticmethod
@@ -852,7 +939,8 @@ class Transaction:
         """Provide user with information regarding the transactions menu then
          direct them to the appropriate functions."""
 
-        # TODO: Change the 'header' information at the top of the transaction_instance menu.
+        # TODO: Change the 'header' information at the top of the transaction_instance menu (and make negative amounts show '-$').
+        # TODO: Add option for new_transfer (separate method from new_transaction).
 
         print("\n~~You are now in the transactions menu.~~")
         while True:
@@ -870,11 +958,11 @@ class Transaction:
                         # Display the selected transaction's attributes at the
                         # top of the menu.
                         output = "Payee: {}    Amount: ${:>,.2f}    " \
-                                 "Category: {}    Account: {}".format(
+                                 "Account: {}    Category: {}".format(
                             instance.payee,
                             instance.amount,
-                            instance.category,
-                            instance.account
+                            instance.account,
+                            instance.category
                             )
                         print()
                         print("-" * len(output))
@@ -980,8 +1068,6 @@ class Account:
         """Present user with list of existing accounts, then delete the one
          corresponding to the user's selection."""
 
-        # TODO: Only let users delete accounts with zero transactions (prompt them to handle those transactions themselves).
-
         num_accounts = 0
         # account_dict maps the user-supplied integer to an account record.
         account_dict = {}
@@ -1015,13 +1101,36 @@ class Account:
             )
 
             if choice_number > 0:
-
-                cur.execute("SELECT balance FROM Accounts WHERE name=?",
-                            (account_dict[choice_number],))
-                temp = cur.fetchall()[0][0]
+                # Check to see if there are any transactions for this account.
+                cur = conn.cursor()
+                sql = "SELECT COUNT(*) FROM Transactions WHERE Account=?"
+                cur.execute(sql, (account_dict[choice_number],))
+                temp = cur.fetchone()[0]
+                if temp > 0:
+                    # There are transactions assigned to this account.
+                    if temp == 1:
+                        output = "There is 1 transaction assigned to {}." \
+                                 " Reassign that transaction to another" \
+                                 " account or delete it, and then try" \
+                                 " again.".format(account_dict[choice_number])
+                    else:
+                        output = "There are {} transactions assigned to {}." \
+                                 " Reassign those transactions to other" \
+                                 " accounts or delete them, and then try" \
+                                 " again.".format(
+                                    temp,
+                                    account_dict[choice_number]
+                                    )
+                    print("\n%s" % output)
+                    cur.close()
+                    press_key_to_continue()
+                    return
 
                 # Check to see if unassigned funds will become negative.
                 # If so, prompt user to change category values first.
+                cur.execute("SELECT balance FROM Accounts WHERE name=?",
+                            (account_dict[choice_number],))
+                temp = cur.fetchall()[0][0]
                 if Category.unassigned_funds - temp < 0:
                     output = "This account's balance (${:,.2f}) exceeds the" \
                              " amount of unassigned funds (${:,.2f}), so it" \
@@ -1313,7 +1422,7 @@ def which_budget(user_budgets):
                     selected_budget = os.path.splitext(os.path.basename(
                             list_of_budgets[budget_number - 1]))[0]
                     output = "Are you sure you want to delete {}? Press 1" \
-                             " for yes, 0 for no: ".format(selected_budget)
+                             " for 'Yes', 0 for 'No': ".format(selected_budget)
                     confirmation = input_validation(
                         output,
                         int,
@@ -1363,8 +1472,11 @@ def input_validation(
         num_ub=float('inf'),
         str_bad_chars=None,
         str_bad_chars_positions=None,
+        is_titlecased=False,
         empty_string_allowed=False
         ):
+
+    # TODO: Use regexes when input is str, pass regex as argument? Replaces str_bad_chars and str_bad_chars_positions
 
     """
     Receive user input and verify that it's valid before returning it.
@@ -1377,6 +1489,7 @@ def input_validation(
     :param str_bad_chars_positions: The corresponding positions of the
             characters in str_bad_chars. If no position is specified for a
             character, this value is 'None'.
+    :param is_titlecased: Specifies whether a string should be made titlecased.
     :param empty_string_allowed: Flag to specify whether the empty string
             is acceptable input.
     :return: The user input, once confirmed that it's acceptable.
@@ -1400,6 +1513,9 @@ def input_validation(
                 continue
 
         if input_type is str:
+
+            if is_titlecased:
+                user_input = user_input.title()
 
             if str_bad_chars is None:
                 # No forbidden characters, so user input is good to go.
@@ -1452,8 +1568,7 @@ def input_validation(
                 print("\n%s" % error_output)
                 continue
 
-        else:
-            # input_type is float.
+        elif input_type is float:
             try:
                 user_input = float(user_input)
             except ValueError:
@@ -1470,6 +1585,27 @@ def input_validation(
                 continue
             # Finally, if '-0' was entered, turn into +0.
             user_input += 0
+
+        elif input_type is dt:
+            # Input type is a datetime.date object.
+            # Input should be in MM/DD/YYYY format.
+            regex = '^\d\d/\d\d/\d\d\d\d$'
+            match = re.search(regex, user_input)
+            if not match:
+                # User input didn't match the regex.
+                error_output = "Invalid entry, must be in 'MM/DD/YYYY' format."
+                print("\n%s" % error_output)
+                continue
+            # User input matched the regex. Convert to datetime.date format.
+            temp = user_input.split('/')
+            month = int(temp[0])
+            day = int(temp[1])
+            year = int(temp[2])
+            try:
+                user_input = dt(year=year, month=month, day=day)
+            except ValueError:
+                print("\nInvalid entry, not a real date.")
+                continue
 
         # user_input is good to go.
         break
