@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 
 """
 Ben Katz coding sample.
@@ -264,10 +264,8 @@ class Category:
             print("\t%s" % output)
 
         # Finally, display the unassigned funds.
-        minus = "   -$" if cls.unassigned_funds < 0 else "    $"
-        final_line_output = "{:{pad1}}{}{:>{pad2},.2f}".format(
+        final_line_output = "{:{pad1}}    ${:>{pad2},.2f}".format(
             "Unassigned Funds",
-            minus,
             cls.unassigned_funds,
             pad1=max_name_length,
             pad2=max_balance_length)
@@ -462,6 +460,7 @@ class Category:
 
         print("\n~~You are now in the categories menu.~~")
         while True:
+            menu_header({"CATEGORIES MENU": ""})
             choice = recite_menu_options(CATEGORY_MENU_OPTIONS)
             if choice == 1:
                 Category.display_categories()
@@ -473,18 +472,10 @@ class Category:
                     # Object instance is now in memory.
                     # Present user with category instance menu.
                     while True:
-                        # Display the selected Category's attributes at the
-                        # top of the menu.
-                        minus = "   -$" if instance.value < 0 else "    $"
-                        output = "{}{}{:>,.2f}".format(
-                                instance.name,
-                                minus,
-                                abs(instance.value)
-                                )
-                        print()
-                        print("-"*len(output))
-                        print(output)
-                        print("-"*len(output))
+                        menu_header({
+                            "Name:": instance.name,
+                            "Value:": instance.value
+                            })
                         choice2 = recite_menu_options(
                             CATEGORY_INSTANCE_OPTIONS)
                         if choice2 == 1:
@@ -497,7 +488,8 @@ class Category:
                                 break
                         elif choice2 == 4:
                             break
-                    print("\n~~You are now returning to the category menu.~~")
+                    print("\n~~You are now returning to the categories"
+                          " menu.~~")
             elif choice == 4:
                 break
 
@@ -944,6 +936,7 @@ class Transaction:
 
         print("\n~~You are now in the transactions menu.~~")
         while True:
+            menu_header({"TRANSACTIONS MENU": ""})
             choice = recite_menu_options(TRANSACTION_MENU_OPTIONS)
             if choice == 1:
                 Transaction.display_transactions()
@@ -957,17 +950,13 @@ class Transaction:
                     while True:
                         # Display the selected transaction's attributes at the
                         # top of the menu.
-                        output = "Payee: {}    Amount: ${:>,.2f}    " \
-                                 "Account: {}    Category: {}".format(
-                            instance.payee,
-                            instance.amount,
-                            instance.account,
-                            instance.category
-                            )
-                        print()
-                        print("-" * len(output))
-                        print(output)
-                        print("-" * len(output))
+                        menu_header({
+                            "Payee:": instance.payee,
+                            "Amount:": instance.amount,
+                            "Date:": instance.date,
+                            "Account:": instance.account,
+                            "Category:": instance.category
+                            })
                         choice2 = recite_menu_options(
                             TRANSACTION_INSTANCE_OPTIONS)
                         if choice2 == 1:
@@ -1230,18 +1219,14 @@ class Account:
         print("\n~~You are now in the accounts menu.~~")
 
         while True:
-
+            menu_header({"ACCOUNTS MENU": ""})
             choice = recite_menu_options(ACCOUNT_MENU_OPTIONS)
-
             if choice == 1:
                 Account.display_accounts()
-
             elif choice == 2:
                 Account.new_account()
-
             elif choice == 3:
                 Account.delete_account()
-
             elif choice == 4:
                 break
 
@@ -1269,13 +1254,12 @@ def main():
     # Here is where the user experience begins:
     print("\nWelcome to Ben's Budget Program!")
     while True:
-        conn = which_budget(user_budgets)
+        conn, budget_name = which_budget(user_budgets)
 
         # Now that a budget is selected, update the total account balance.
         cur = conn.cursor()
         cur.execute("SELECT SUM(balance) FROM Accounts")
         Account.total_account_balance = cur.fetchall()[0][0]
-
         # A brand new budget has no data, so cur.fetchall returns None.
         if Account.total_account_balance is None:
             Account.total_account_balance = 0
@@ -1283,7 +1267,6 @@ def main():
         # Also update the unassigned funds.
         cur.execute("SELECT SUM(value) FROM Categories")
         temp = cur.fetchall()[0][0]
-
         # A brand new budget has no data, so cur.fetchall returns None.
         if temp is None:
             temp = 0
@@ -1291,6 +1274,7 @@ def main():
         cur.close()
 
         while True:
+            menu_header({"MAIN MENU:": budget_name})
             choice = recite_menu_options(MAIN_MENU_OPTIONS)
             if choice == 1:
                 Category.menu_for_categories()
@@ -1312,9 +1296,9 @@ def which_budget(user_budgets):
     """Top-level menu, determines which budget (database) to connect to."""
 
     # TODO: Make filenames distinct from user-supplied budget names. Then no need to limit user's input!
-    # TODO: Provide option to delete an existing budget.
 
     while True:
+        menu_header({"BUDGET SELECTION MENU": ""})
         choice = recite_menu_options(WHICH_BUDGET_MENU_OPTIONS)
         if choice == 1:
             # The user wants to create a brand new budget.
@@ -1341,8 +1325,12 @@ def which_budget(user_budgets):
                 continue
             # Name has been approved, proceed with setting up new database
             # and connecting to it.
+            # The 'detect_types' line allows the DATE type to survive the
+            # round-trip from Python to sqlite3 database to Python again.
             connection = sqlite3.connect(
-                os.path.join(user_budgets, budget_name + '.db'))
+                os.path.join(user_budgets, budget_name + '.db'),
+                detect_types=sqlite3.PARSE_DECLTYPES
+                )
             cur = connection.cursor()
             cur.execute('CREATE TABLE Categories('
                         'name TEXT,'
@@ -1358,7 +1346,7 @@ def which_budget(user_budgets):
                         'category TEXT,'
                         'amount REAL,'
                         'payee TEXT,'
-                        'date TEXT,'
+                        'date DATE,'
                         'memo TEXT)'
                         )
             cur.close()
@@ -1374,6 +1362,7 @@ def which_budget(user_budgets):
             if len(list_of_budgets) == 0:
                 print("\nThere are no existing budgets. "
                       "You should make a new one!")
+                press_key_to_continue()
             else:
                 print("\nWhich budget would you like to load?")
                 for i in range(len(list_of_budgets)):
@@ -1390,11 +1379,16 @@ def which_budget(user_budgets):
                 if budget_number > 0:
                     # Load the budget that corresponds to the number
                     # the user entered.
+                    # The 'detect_types' line allows the DATE type to
+                    # survive the round-trip from Python to sqlite3 database
+                    # to Python again.
                     connection = sqlite3.connect(
-                        list_of_budgets[budget_number - 1])
-                    print("\nBudget loaded: %s" % os.path.splitext(
-                        os.path.basename(list_of_budgets[
-                                             budget_number - 1]))[0])
+                        list_of_budgets[budget_number - 1],
+                        detect_types=sqlite3.PARSE_DECLTYPES
+                        )
+                    budget_name = os.path.splitext(os.path.basename(
+                        list_of_budgets[budget_number - 1]))[0]
+                    print("\nBudget loaded: %s" % budget_name)
                     break
 
         if choice == 3:
@@ -1404,6 +1398,7 @@ def which_budget(user_budgets):
             if len(list_of_budgets) == 0:
                 print("\nThere are no existing budgets. "
                       "You should make a new one!")
+                press_key_to_continue()
             else:
                 print("\nWhich budget would you like to delete?")
                 for i in range(len(list_of_budgets)):
@@ -1441,15 +1436,13 @@ def which_budget(user_budgets):
             exit_program()
 
     press_key_to_continue()
-    return connection
+    return connection, budget_name
 
 # ____________________________________________________________________________#
 
 
 def recite_menu_options(list_of_options):
     """Present user with a series of options and make them choose one."""
-
-    # TODO: Above each menu, show the relevant info like how the category_instance_menu is currently. So show budget name above main menu, 'categories' above category_menu, etc.
 
     print("\nWhat would you like to do?")
     for i in range(len(list_of_options)):
@@ -1602,7 +1595,7 @@ def input_validation(
             day = int(temp[1])
             year = int(temp[2])
             try:
-                user_input = dt(year=year, month=month, day=day)
+                user_input = dt(month=month, day=day, year=year)
             except ValueError:
                 print("\nInvalid entry, not a real date.")
                 continue
@@ -1619,6 +1612,38 @@ def press_key_to_continue():
     """Prompts the user to hit a button before displaying the next menu."""
     input("Press Enter to continue... ")
     print()     # Prints a blank line.
+
+# ____________________________________________________________________________#
+
+
+def menu_header(header_dict):
+    """Print a menu header showing the items within header_list. The keys
+    of the dictionary are expected to be strings, and the values are expected
+    to be floats, strings, datetime.date objects, or NoneType."""
+
+    output = ""
+    gap = "    "
+
+    for key in header_dict:
+        if type(header_dict[key]) == str:
+            item_gap = " "
+            value = header_dict[key]
+        elif type(header_dict[key]) == float:
+            item_gap = " -$" if header_dict[key] < 0 else " $"
+            value = "{:,.2f}".format(abs(header_dict[key]))
+        elif type(header_dict[key]) == dt:
+            item_gap = " "
+            value = str(header_dict[key].strftime("%m/%d/%Y"))
+        elif header_dict[key] is None:
+            item_gap = ": "
+            value = "(None)"
+        output = output + gap + key + item_gap + value
+
+    output = output.strip()
+    print()
+    print("-" * len(output))
+    print(output)
+    print("-" * len(output))
 
 # ____________________________________________________________________________#
 
