@@ -609,7 +609,7 @@ class Transaction:
             return
         else:
             if abs(instance.amount) > account_list[
-                        account_num- 1][1] and is_expense == True:
+                        account_num- 1][1] and is_expense:
                 output = "\nThe selected account's balance is too low" \
                          " (${:,.2f}). Please add at least ${:,.2f} to the" \
                          " account and then try again.".format(
@@ -629,10 +629,14 @@ class Transaction:
 
         # Ask user to choose a category.
         assign_category = True
-        if not is_expense:
+        if not is_expense or instance.amount == 0:
             # Category is optional.
-            output = "Since this is an income transaction, assigning" \
-                     " a category to it is optional."
+            if instance.amount == 0:
+                output = "Since this transaction's amount is $0.00," \
+                         " assigning a category to it is optional."
+            else:
+                output = "Since this is an income transaction, assigning" \
+                         " a category to it is optional."
             print(output)
             output = "Would you like to assign a category to this" \
                      " transaction? Enter 1 for 'Yes', 0 for 'No': "
@@ -769,8 +773,6 @@ class Transaction:
     def delete_transaction(self):
         """Ask user for confirmation before deleting, and then delete."""
 
-        # TODO: Currently shows uid at the end, show different attribute(s) instead.
-
         cur = conn.cursor()
         cur.execute("SELECT balance FROM Accounts WHERE name=?",
                     (self.account,))
@@ -832,8 +834,7 @@ class Transaction:
             cur.execute("DELETE FROM Transactions WHERE uid=?",
                         (self.uid,))
             conn.commit()
-            print("\nYou have successfully deleted %s from your"
-                  " list of transactions." % self.uid)
+            print("\nYou have successfully deleted this transaction.")
             press_key_to_continue()
 
         cur.close()
@@ -841,7 +842,98 @@ class Transaction:
 
     @staticmethod
     def display_transactions():
-        pass
+
+        cur = conn.cursor()
+        cur.execute("SELECT payee, amount, date, account, category, memo, uid"
+                    " FROM Transactions")
+        instance_list = [Transaction(
+            payee=i[0],
+            amount=i[1],
+            date=i[2],
+            account=i[3],
+            category=i[4],
+            memo=i[5],
+            uid=i[6]
+            )
+            for i in cur.fetchall()]
+
+        if len(instance_list) == 0:
+            # The Transactions table contains no data
+            print("\nYou have no Transactions! You should add some!")
+            cur.close()
+            press_key_to_continue()
+            return
+
+        # Collect information to format the output.
+        # Specifically, the length of the longest item in each column.
+        max_payee_len = len("Payee")
+        max_category_len = len("Category")
+        max_account_len = len("Account")
+        max_memo_len = len("Memo")
+        max_amount_len = len("Amount")
+        for transaction in instance_list:
+            if len(transaction.payee) > max_payee_len:
+                max_payee_len = len(transaction.payee)
+            if len(transaction.account) > max_account_len:
+                max_account_len = len(transaction.account)
+            if transaction.category is None:
+                transaction.category = ""
+            else:
+                if len(transaction.category) > max_category_len:
+                    max_category_len = len(transaction.category)
+            if transaction.memo is None:
+                transaction.memo = ""
+            else:
+                if len(transaction.memo) > max_memo_len:
+                    max_memo_len = len(transaction.memo)
+            minus = "-$" if transaction.amount < 0 else "$"
+            instance_amount = minus + "{:,.2f}".format(abs(transaction.amount))
+            if len(instance_amount) > max_amount_len:
+                max_amount_len = len(instance_amount)
+        max_date_len = len("xx/xx/xxxx")
+
+        # Print each transaction row by row.
+        print("\nHere are your transactions:")
+        top = "{:{pad1}}    {:>{pad2}}    {:{pad3}}    {:{pad4}}    " \
+              "{:{pad5}}    {:{pad6}}".format(
+            "Payee",
+            "Amount",
+            "Date",
+            "Account",
+            "Category",
+            "Memo",
+            pad1=max_payee_len,
+            pad2=max_amount_len,
+            pad3=max_date_len,
+            pad4=max_account_len,
+            pad5=max_category_len,
+            pad6=max_memo_len
+            )
+        print("\t%s" % top)
+        print("\t%s" % ("-" * len(top)))
+        for transaction in instance_list:
+            minus = "-$" if transaction.amount < 0 else "$"
+            temp = minus + "{:,.2f}".format(abs(transaction.amount))
+            output = "{:{pad1}}    {:>{pad2}}    {:{pad3}}    {:{pad4}}    " \
+                     "{:{pad5}}    {:{pad6}}".format(
+                transaction.payee,
+                temp,
+                transaction.date.strftime("%m/%d/%Y"),
+                transaction.account,
+                transaction.category,
+                transaction.memo,
+                pad1=max_payee_len,
+                pad2=max_amount_len,
+                pad3=max_date_len,
+                pad4=max_account_len,
+                pad5=max_category_len,
+                pad6=max_memo_len
+                )
+            print("\t%s" % output)
+        cur.close()
+        print()
+        press_key_to_continue()
+
 
     @staticmethod
     def choose_transaction():
@@ -931,7 +1023,6 @@ class Transaction:
         """Provide user with information regarding the transactions menu then
          direct them to the appropriate functions."""
 
-        # TODO: Change the 'header' information at the top of the transaction_instance menu (and make negative amounts show '-$').
         # TODO: Add option for new_transfer (separate method from new_transaction).
 
         print("\n~~You are now in the transactions menu.~~")
@@ -987,9 +1078,7 @@ class Transaction:
 
 class Account:
 
-    # TODO: Balance and Starting Balance should be two different attributes of each account instance. Alternatively, SB could be implemented as a transaction (like what YNAB does).
     # TODO: Implement choose_account method and account_instance_menu, just like categories. Except don't include update_account_balance (instead offer to create new transaction with this account).
-    # TODO: Accounts should never be allowed to have negative balances. This ensures that unassigned_funds is never negative. This program doesn't allow for credit cards!
 
     total_account_balance = 0
 
@@ -1081,7 +1170,7 @@ class Account:
                 print("\t%s)" % num_accounts, account_dict[num_accounts])
 
         if num_accounts > 0:
-            choice_number = input_validation(
+            choice_num = input_validation(
                 "Enter the number in front of the account you wish to delete,"
                 " or enter 0 to cancel: ",
                 int,
@@ -1089,11 +1178,11 @@ class Account:
                 num_ub=num_accounts
             )
 
-            if choice_number > 0:
+            if choice_num > 0:
                 # Check to see if there are any transactions for this account.
                 cur = conn.cursor()
                 sql = "SELECT COUNT(*) FROM Transactions WHERE Account=?"
-                cur.execute(sql, (account_dict[choice_number],))
+                cur.execute(sql, (account_dict[choice_num],))
                 temp = cur.fetchone()[0]
                 if temp > 0:
                     # There are transactions assigned to this account.
@@ -1101,14 +1190,14 @@ class Account:
                         output = "There is 1 transaction assigned to {}." \
                                  " Reassign that transaction to another" \
                                  " account or delete it, and then try" \
-                                 " again.".format(account_dict[choice_number])
+                                 " again.".format(account_dict[choice_num])
                     else:
                         output = "There are {} transactions assigned to {}." \
                                  " Reassign those transactions to other" \
                                  " accounts or delete them, and then try" \
                                  " again.".format(
                                     temp,
-                                    account_dict[choice_number]
+                                    account_dict[choice_num]
                                     )
                     print("\n%s" % output)
                     cur.close()
@@ -1118,7 +1207,7 @@ class Account:
                 # Check to see if unassigned funds will become negative.
                 # If so, prompt user to change category values first.
                 cur.execute("SELECT balance FROM Accounts WHERE name=?",
-                            (account_dict[choice_number],))
+                            (account_dict[choice_num],))
                 temp = cur.fetchall()[0][0]
                 if Category.unassigned_funds - temp < 0:
                     output = "This account's balance (${:,.2f}) exceeds the" \
@@ -1132,21 +1221,33 @@ class Account:
                              " categories' values before deleting this" \
                              " account.".format(temp-Category.unassigned_funds)
                     print(output)
-
+                    press_key_to_continue()
                 else:
-                    # Update class attribute before deleting record from table.
-                    cls.total_account_balance -= temp
-                    Category.unassigned_funds -= temp
+                    # Ask the user to confirm that the category should be
+                    # deleted.
+                    text = "Are you sure that you want to delete the {} " \
+                           "account? ".format(account_dict[num_accounts])
+                    confirmation = input_validation(
+                        text + "Enter 1 for yes, 0 for no: ",
+                        int,
+                        num_lb=0,
+                        num_ub=1
+                        )
+                    if confirmation == 1:
+                        # Delete the account.
+                        # Update class attribute before deleting
+                        # record from table.
+                        cls.total_account_balance -= temp
+                        Category.unassigned_funds -= temp
 
-                    # Now okay to delete record.
-                    cur.execute("DELETE FROM Accounts WHERE name=?",
-                                (account_dict[choice_number],))
-                    conn.commit()
-
-                    print("\nYou have successfully deleted %s from your list"
-                          " of accounts." % account_dict[choice_number])
-
-                press_key_to_continue()
+                        # Now okay to delete record.
+                        cur.execute("DELETE FROM Accounts WHERE name=?",
+                                    (account_dict[choice_num],))
+                        conn.commit()
+                        text = "You have successfully deleted %s from your " \
+                               "list of accounts." % account_dict[choice_num]
+                        print("\n%s" % text)
+                        press_key_to_continue()
         cur.close()
 
     @classmethod
