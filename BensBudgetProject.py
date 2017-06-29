@@ -219,7 +219,7 @@ class Category:
         # TODO: If categories have negative balances, alert the user.
 
         # Here is how to interpret the string format specifiers below:
-        # Let's look at {:>#{pad2},.2f} as an example.
+        # Let's look at {:>{pad2},.2f} as an example.
         # The ':' means the following characters are 'format_specs'.
         # The '>' means right-justified.
         # The '{pad2}' is a nested format specifier.
@@ -241,34 +241,37 @@ class Category:
             return
 
         # Now determine the longest name and balance (when printed).
-        max_name_length = 16        # 16 is the length of "Unassigned Funds".
-        max_balance_length = len("{:,.2f}".format(abs(cls.unassigned_funds)))
+        max_name_length = len("Unassigned Funds")
+        max_balance_length = len("${:,.2f}".format(cls.unassigned_funds))
         for category in instance_list:
             if len(category.name) > max_name_length:
                 max_name_length = len(category.name)
-            instance_balance = "{:,.2f}".format(abs(category.value))
+            minus = "-$" if category.value < 0 else "$"
+            instance_balance = minus + "{:,.2f}".format(abs(category.value))
             if len(instance_balance) > max_balance_length:
                 max_balance_length = len(instance_balance)
 
         # Print each category row by row.
-        print("\nHere are your categories and their values:")
+        print("\nHere are your categories and their values:\n")
         for category in instance_list:
-            minus = "   -$" if category.value < 0 else "    $"
-            output = "{:{pad1}}{}{:>{pad2},.2f}".format(
+            minus = "-$" if category.value < 0 else "$"
+            display_value = minus + "{:,.2f}".format(abs(category.value))
+            output = "{:{pad1}}    {:>{pad2}}".format(
                 category.name,
-                minus,
-                abs(category.value),
+                display_value,
                 pad1=max_name_length,
                 pad2=max_balance_length,
                 )
             print("\t%s" % output)
 
         # Finally, display the unassigned funds.
-        final_line_output = "{:{pad1}}    ${:>{pad2},.2f}".format(
+        display_unassigned_funds = "${:,.2f}".format(cls.unassigned_funds)
+        final_line_output = "{:{pad1}}    {:>{pad2}}".format(
             "Unassigned Funds",
-            cls.unassigned_funds,
+            display_unassigned_funds,
             pad1=max_name_length,
-            pad2=max_balance_length)
+            pad2=max_balance_length
+            )
         print("\t%s" % ("-"*len(final_line_output)))
         print("\t%s" % final_line_output)
 
@@ -717,7 +720,8 @@ class Transaction:
             str,
             empty_string_allowed=True
             )
-        instance.memo = memo
+        if memo != "":
+            instance.memo = memo
 
 
         # Now assign a UID to the transaction.
@@ -893,7 +897,7 @@ class Transaction:
         max_date_len = len("xx/xx/xxxx")
 
         # Print each transaction row by row.
-        print("\nHere are your transactions:")
+        print("\nHere are your transactions:\n")
         top = "{:{pad1}}    {:>{pad2}}    {:{pad3}}    {:{pad4}}    " \
               "{:{pad5}}    {:{pad6}}".format(
             "Payee",
@@ -913,11 +917,11 @@ class Transaction:
         print("\t%s" % ("-" * len(top)))
         for transaction in instance_list:
             minus = "-$" if transaction.amount < 0 else "$"
-            temp = minus + "{:,.2f}".format(abs(transaction.amount))
+            display_amount = minus + "{:,.2f}".format(abs(transaction.amount))
             output = "{:{pad1}}    {:>{pad2}}    {:{pad3}}    {:{pad4}}    " \
                      "{:{pad5}}    {:{pad6}}".format(
                 transaction.payee,
-                temp,
+                display_amount,
                 transaction.date.strftime("%m/%d/%Y"),
                 transaction.account,
                 transaction.category,
@@ -1046,7 +1050,8 @@ class Transaction:
                             "Amount:": instance.amount,
                             "Date:": instance.date,
                             "Account:": instance.account,
-                            "Category:": instance.category
+                            "Category:": instance.category,
+                            "Memo:": instance.memo
                             })
                         choice2 = recite_menu_options(
                             TRANSACTION_INSTANCE_OPTIONS)
@@ -1259,7 +1264,7 @@ class Account:
         # TODO: Fix floating point errors for large numbers. Use "decimal" module?
 
         # Here is how to interpret the string format specifiers below:
-        # Let's look at {:>#{pad2},.2f} as an example.
+        # Let's look at {:>{pad2},.2f} as an example.
         # The ':' means the following characters are 'format_specs'.
         # The '>' means right-justified.
         # The '{pad2}' is a nested format specifier.
@@ -1281,28 +1286,30 @@ class Account:
             return
 
         # Now determine the longest name and balance (when printed).
-        total_balance_string = "{:,.2f}".format(cls.total_account_balance)
+        total_balance_string = "${:,.2f}".format(cls.total_account_balance)
         max_balance_length = len(total_balance_string)
-        max_name_length = 13        # 13 is the length of "Total balance".
+        max_name_length = len("Total Balance")
         for account in instance_list:
             if len(account.name) > max_name_length:
                 max_name_length = len(account.name)
 
         # Print each account row by row.
-        print("\nHere are your accounts and their balances:")
+        print("\nHere are your accounts and their balances:\n")
         for account in instance_list:
-            output = "{:{pad1}}    ${:>{pad2},.2f}".format(
+            display_balance = "${:,.2f}".format(account.balance)
+            output = "{:{pad1}}    {:>{pad2}}".format(
                 account.name,
-                account.balance,
+                display_balance,
                 pad1=max_name_length,
                 pad2=max_balance_length
                 )
             print("\t%s" % output)
 
         # Finally, display the total account balance.
-        final_line_output = "{:{pad1}}    ${:>{pad2},.2f}".format(
+        display_total_balance = "${:,.2f}".format(cls.total_account_balance)
+        final_line_output = "{:{pad1}}    {:>{pad2}}".format(
             "Total Balance",
-            cls.total_account_balance,
+            display_total_balance,
             pad1=max_name_length,
             pad2=max_balance_length)
         print("\t%s" % ("-"*len(final_line_output)))
@@ -1736,7 +1743,7 @@ def menu_header(header_dict):
             item_gap = " "
             value = str(header_dict[key].strftime("%m/%d/%Y"))
         elif header_dict[key] is None:
-            item_gap = ": "
+            item_gap = " "
             value = "(None)"
         output = output + gap + key + item_gap + value
 
