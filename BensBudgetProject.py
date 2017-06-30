@@ -94,28 +94,15 @@ class BaseClass (metaclass=ABCMeta):
 
         # TODO: Use pagination.
 
-        object_list = []
         name_lowercase = cls.__name__.lower()
-
-        cur = conn.cursor()
-        cur.execute("SELECT * FROM {}".format(cls.table_name))
-        query_results = cur.fetchall()
-
-        if len(query_results) == 0:
-            print("\nYou have no {}! You should make some!".format(
-                name_lowercase))
-            press_key_to_continue()
-            cur.close()
+        object_list = cls.database_to_memory()
+        if object_list is None:
             return None
-
-        for i in query_results:
-            object_list.append(cls.instantiate(i))
-
-
-        # Format the output. Call the print_rows() method.
         print("\nWhich {} do you want to select?\n".format(name_lowercase))
-        cls.print_rows(object_list, cls.display_col_names, show_nums=True)
-
+        cls.print_rows(
+            object_list,
+            cls.display_col_names,
+            show_nums=True)
         print()
         choice_number = input_validation(
             "Enter the number in front of the {} you wish to "
@@ -125,17 +112,76 @@ class BaseClass (metaclass=ABCMeta):
             num_ub=len(object_list)
             )
 
-
         if choice_number > 0:
-            selected_record = object_list[choice_number - 1]
+            selected_object = object_list[choice_number - 1]
             print("\nYou have selected your {}.".format(name_lowercase))
             press_key_to_continue()
+            return selected_object
+        else:
+            return None
+
+
+    @classmethod
+    def display_x(cls, summary_attr=None, summary_attr_name=None):
+
+        # TODO: Use with statement to open and close the cursor.
+        # TODO: Fix floating point errors for large numbers. Use "decimal" module?
+        # TODO: If categories have negative balances, alert the user.
+
+        left_margin = 5
+
+        name_lowercase = cls.__name__.lower()
+        object_list = cls.database_to_memory()
+        if object_list is None:
+            return None
+        print("\nHere is your {} list:\n".format(name_lowercase))
+        cls.print_rows(
+            object_list,
+            cls.display_col_names,
+            )
+
+        # Now show an (optional) summary metric.
+        if summary_attr is not None:
+            print()
+            minus = "-$" if summary_attr < 0 else "$"
+            concat = minus + "{:,.2f}".format(abs(summary_attr))
+            output = "{}: {}".format(
+                summary_attr_name,
+                concat
+                )
+            print("{}{}".format(" "*left_margin, output))
+
+
+        print()
+        press_key_to_continue()
+
+
+
+    @classmethod
+    def database_to_memory(cls):
+        """Queries the entire database table corresponding to the class
+        which calls this method, instantiates objects for every record returned
+        from the database, and returns all the objects in a list."""
+        object_list = []
+
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM {}".format(cls.table_name))
+        query_results = cur.fetchall()
+
+        if len(query_results) == 0:
+            print("\nYou have no {}! You should make some!".format(
+                cls.__name__.lower()
+                )
+            )
+            press_key_to_continue()
             cur.close()
-            return selected_record
+            return None
 
-
+        for i in query_results:
+            object_list.append(cls.instantiate(i))
         cur.close()
-        return None
+        return object_list
+
 
 
     @staticmethod
@@ -231,7 +277,11 @@ class BaseClass (metaclass=ABCMeta):
             output = output.strip()
             if show_nums:
                 temp = str(num) + ")"
-                print("{:{pad}}{}".format(temp, output, pad=left_margin))
+                print("{:{pad}}{}".format(
+                    temp,
+                    output,
+                    pad=left_margin)
+                    )
                 num += 1
             else:
                 print("{}{}".format(" "*left_margin, output))
@@ -243,6 +293,7 @@ class Category(BaseClass):
 
     # unassigned_funds is not ever allowed to become negative.
     unassigned_funds = 0
+    unassigned_funds_name = "Unassigned Funds"
     table_name = "Categories"
     display_col_names = [
         "name",
@@ -370,77 +421,6 @@ class Category(BaseClass):
             press_key_to_continue()
         return confirmation
 
-    @classmethod
-    def display_categories(cls):
-        """Query the names and values of the user's categories and present them
-        in a vertical list."""
-
-        # TODO: Use with statement to open and close the cursor.
-        # TODO: Fix floating point errors for large numbers. Use "decimal" module?
-        # TODO: If categories have negative balances, alert the user.
-
-        # Here is how to interpret the string format specifiers below:
-        # Let's look at {:>{pad2},.2f} as an example.
-        # The ':' means the following characters are 'format_specs'.
-        # The '>' means right-justified.
-        # The '{pad2}' is a nested format specifier.
-        #   Here it contains a variable for the total number of characters.
-        # The ',' groups the digits into sets of 3, separated by a comma.
-        # The '.2f' means show two digits after the decimal place.
-        #   Note that the 'f' in '.2f' specifies fixed point.
-
-        cur = conn.cursor()
-        cur.execute("SELECT name, value FROM Categories")
-        instance_list = [Category(name=i[0], value=i[1])
-                         for i in cur.fetchall()]
-
-        if len(instance_list) == 0:
-            # The Categories table contains no data
-            print("\nYou have no categories! You should make some!")
-            cur.close()
-            press_key_to_continue()
-            return
-
-        # Now determine the longest name and balance (when printed).
-        max_name_length = len("Unassigned Funds")
-        max_balance_length = len("${:,.2f}".format(cls.unassigned_funds))
-        for category in instance_list:
-            if len(category.name) > max_name_length:
-                max_name_length = len(category.name)
-            minus = "-$" if category.value < 0 else "$"
-            instance_balance = minus + "{:,.2f}".format(abs(category.value))
-            if len(instance_balance) > max_balance_length:
-                max_balance_length = len(instance_balance)
-
-        # Print each category row by row.
-        print("\nHere are your categories and their values:\n")
-        for category in instance_list:
-            minus = "-$" if category.value < 0 else "$"
-            display_value = minus + "{:,.2f}".format(abs(category.value))
-            output = "{:{pad1}}    {:>{pad2}}".format(
-                category.name,
-                display_value,
-                pad1=max_name_length,
-                pad2=max_balance_length,
-                )
-            print("\t%s" % output)
-
-        # Finally, display the unassigned funds.
-        display_unassigned_funds = "${:,.2f}".format(cls.unassigned_funds)
-        final_line_output = "{:{pad1}}    {:>{pad2}}".format(
-            "Unassigned Funds",
-            display_unassigned_funds,
-            pad1=max_name_length,
-            pad2=max_balance_length
-            )
-        print("\t%s" % ("-"*len(final_line_output)))
-        print("\t%s" % final_line_output)
-
-        cur.close()
-        print()
-        press_key_to_continue()
-
-
     def update_category_name(self):
         """Given a Category instance, allow user to update the instance's
         name."""
@@ -558,8 +538,8 @@ class Category(BaseClass):
         cur.close()
         press_key_to_continue()
 
-    @staticmethod
-    def menu_for_categories():
+    @classmethod
+    def menu_for_categories(cls):
         """Provide user with information regarding the category menu then
         direct them to the appropriate functions."""
 
@@ -571,7 +551,10 @@ class Category(BaseClass):
             menu_header({"CATEGORIES MENU": ""})
             choice = recite_menu_options(CATEGORY_MENU_OPTIONS)
             if choice == 1:
-                Category.display_categories()
+                Category.display_x(
+                    cls.unassigned_funds,
+                    cls.unassigned_funds_name
+                    )
             elif choice == 2:
                 Category.new_category()
             elif choice == 3:
@@ -972,101 +955,6 @@ class Transaction(BaseClass):
         cur.close()
         return confirmation
 
-    @staticmethod
-    def display_transactions():
-
-        cur = conn.cursor()
-        cur.execute("SELECT payee, amount, date, account, category, memo, uid"
-                    " FROM Transactions")
-        instance_list = [Transaction(
-            payee=i[0],
-            amount=i[1],
-            date=i[2],
-            account=i[3],
-            category=i[4],
-            memo=i[5],
-            uid=i[6]
-            )
-            for i in cur.fetchall()]
-
-        if len(instance_list) == 0:
-            # The Transactions table contains no data
-            print("\nYou have no Transactions! You should add some!")
-            cur.close()
-            press_key_to_continue()
-            return
-
-        # Collect information to format the output.
-        # Specifically, the length of the longest item in each column.
-        max_payee_len = len("Payee")
-        max_category_len = len("Category")
-        max_account_len = len("Account")
-        max_memo_len = len("Memo")
-        max_amount_len = len("Amount")
-        for transaction in instance_list:
-            if len(transaction.payee) > max_payee_len:
-                max_payee_len = len(transaction.payee)
-            if len(transaction.account) > max_account_len:
-                max_account_len = len(transaction.account)
-            if transaction.category is None:
-                transaction.category = ""
-            else:
-                if len(transaction.category) > max_category_len:
-                    max_category_len = len(transaction.category)
-            if transaction.memo is None:
-                transaction.memo = ""
-            else:
-                if len(transaction.memo) > max_memo_len:
-                    max_memo_len = len(transaction.memo)
-            minus = "-$" if transaction.amount < 0 else "$"
-            instance_amount = minus + "{:,.2f}".format(abs(transaction.amount))
-            if len(instance_amount) > max_amount_len:
-                max_amount_len = len(instance_amount)
-        max_date_len = len("xx/xx/xxxx")
-
-        # Print each transaction row by row.
-        print("\nHere are your transactions:\n")
-        top = "{:{pad1}}    {:>{pad2}}    {:{pad3}}    {:{pad4}}    " \
-              "{:{pad5}}    {:{pad6}}".format(
-            "Payee",
-            "Amount",
-            "Date",
-            "Account",
-            "Category",
-            "Memo",
-            pad1=max_payee_len,
-            pad2=max_amount_len,
-            pad3=max_date_len,
-            pad4=max_account_len,
-            pad5=max_category_len,
-            pad6=max_memo_len
-            )
-        print("\t%s" % top)
-        print("\t%s" % ("-" * len(top)))
-        for transaction in instance_list:
-            minus = "-$" if transaction.amount < 0 else "$"
-            display_amount = minus + "{:,.2f}".format(abs(transaction.amount))
-            output = "{:{pad1}}    {:>{pad2}}    {:{pad3}}    {:{pad4}}    " \
-                     "{:{pad5}}    {:{pad6}}".format(
-                transaction.payee,
-                display_amount,
-                transaction.date.strftime("%m/%d/%Y"),
-                transaction.account,
-                transaction.category,
-                transaction.memo,
-                pad1=max_payee_len,
-                pad2=max_amount_len,
-                pad3=max_date_len,
-                pad4=max_account_len,
-                pad5=max_category_len,
-                pad6=max_memo_len
-                )
-            print("\t%s" % output)
-        cur.close()
-        print()
-        press_key_to_continue()
-
-
     def update_transaction_payee(self):
         pass
 
@@ -1097,7 +985,7 @@ class Transaction(BaseClass):
             menu_header({"TRANSACTIONS MENU": ""})
             choice = recite_menu_options(TRANSACTION_MENU_OPTIONS)
             if choice == 1:
-                Transaction.display_transactions()
+                Transaction.display_x()
             elif choice == 2:
                 Transaction.new_transaction()
             elif choice == 3:
