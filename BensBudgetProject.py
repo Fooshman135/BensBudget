@@ -29,6 +29,7 @@ import sqlite3
 import glob
 from datetime import date as dt
 import re
+from abc import ABCMeta
 
 # Bash uses ~ to mean the home directory, but Python doesn't know that.
 # That's why we use os.path.expanduser() in the following command.
@@ -83,11 +84,171 @@ TRANSACTION_INSTANCE_OPTIONS = ["edit the transaction's account,",
 # ____________________________________________________________________________#
 
 
-class Category:
+class BaseClass (metaclass=ABCMeta):
+
+    @classmethod
+    def choose_x(cls):
+        """Presents the user with a list of all records from the corresponding
+        table, asks for a selection, then instantiates the object and returns
+        it."""
+
+        # TODO: Use pagination.
+
+        object_list = []
+        name_lowercase = cls.__name__.lower()
+
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM {}".format(cls.table_name))
+        query_results = cur.fetchall()
+
+        if len(query_results) == 0:
+            print("\nYou have no {}! You should make some!".format(
+                name_lowercase))
+            press_key_to_continue()
+            cur.close()
+            return None
+
+        for i in query_results:
+            object_list.append(cls.instantiate(i))
+
+
+        # Format the output. Call the print_rows() method.
+        print("\nWhich {} do you want to select?\n".format(name_lowercase))
+        cls.print_rows(object_list, cls.display_col_names, show_nums=True)
+
+        print()
+        choice_number = input_validation(
+            "Enter the number in front of the {} you wish to "
+            "select, or enter 0 to cancel: ".format(name_lowercase),
+            int,
+            num_lb=0,
+            num_ub=len(object_list)
+            )
+
+
+        if choice_number > 0:
+            selected_record = object_list[choice_number - 1]
+            print("\nYou have selected your {}.".format(name_lowercase))
+            press_key_to_continue()
+            cur.close()
+            return selected_record
+
+
+        cur.close()
+        return None
+
+
+    @staticmethod
+    def print_rows(table, col_names, show_nums=False):
+        """Given a table of data (implemented as a list of objects), print out
+         the rows with proper formatting.
+
+         :param table: A list of object instances whose attributes are to be
+         displayed in tabular format. Each row of the table corresponds to a
+         single object, and each column corresponds to an object attribute.
+         Note that every object in this list are from the same class.
+         :param col_names: A list of strings corresponding to a subset of the
+         attributes of the objects in the 'table' list. This might be equal to
+         the full list of attributes. Each string must be spelled exactly as
+         the attribute is spelled, including casing. Only the attributes whose
+         names appear in this parameter will be printed.
+         :param show_nums: A flag that determines whether to display
+         incrementing integers in front of each row (to assist user selection).
+         """
+
+        max_list = []
+        top = ""
+        num = 1
+
+        # The following variables can be tweaked to change the formatting
+        # of the output.
+        left_margin = 5
+        gap = 6
+
+        for column in col_names:
+            max_list.append(len(column))
+
+        # Calculate maximum lengths for each column for formatting purposes.
+        for obj in table:
+            for i in range(len(col_names)):
+                att = getattr(obj, col_names[i])
+                if type(att) == str or type(att) == int:
+                    compare = str(att)
+                elif type(att) == float:
+                    minus = "-$" if att < 0 else "$"
+                    compare = minus + "{:,.2f}".format(abs(att))
+                elif type(att) == dt:
+                    compare = "xx/xx/xxxx"
+                elif att is None:
+                    continue
+                else:
+                    raise Exception("Ben Katz - developer error.")
+
+                if max_list[i] < len(compare):
+                    max_list[i] = len(compare)
+
+        # Print top row and dividing line.
+        for i in range(len(col_names)):
+            top = top + "{}{:{pad}}".format(
+                " "*gap,
+                col_names[i].title(),
+                pad=max_list[i]
+                )
+        top = top.lstrip()
+        print("{}{}".format(" "*left_margin, top))
+        print("{}{}".format(" "*left_margin, "-"*len(top)))
+
+        # Now print all the other rows.
+        for obj in table:
+            output = ""
+            for i in range(len(col_names)):
+                att = getattr(obj, col_names[i])
+                right_justified = False
+                if type(att) == str or type(att) == int:
+                    concat = str(att)
+                elif type(att) == float:
+                    minus = "-$" if att < 0 else "$"
+                    concat = minus + "{:,.2f}".format(abs(att))
+                    right_justified = True
+                elif type(att) == dt:
+                    concat = att.strftime("%m/%d/%Y")
+                elif att is None:
+                    concat = ""
+                else:
+                    raise Exception("Ben Katz - developer error.")
+                if right_justified:
+                    output = output + "{}{:>{pad}}".format(
+                        " "*gap,
+                        concat,
+                        pad=max_list[i]
+                        )
+                else:
+                    output = output + "{}{:{pad}}".format(
+                        " "*gap,
+                        concat,
+                        pad=max_list[i]
+                        )
+            output = output.strip()
+            if show_nums:
+                temp = str(num) + ")"
+                print("{:{pad}}{}".format(temp, output, pad=left_margin))
+                num += 1
+            else:
+                print("{}{}".format(" "*left_margin, output))
+
+# ____________________________________________________________________________#
+
+
+class Category(BaseClass):
 
     # unassigned_funds is not ever allowed to become negative.
-    # This is enforced by not allowing accounts to have negative balances.
     unassigned_funds = 0
+    table_name = "Categories"
+    display_col_names = [
+        "name",
+        "value"
+        ]
+
 
     def __init__(self, name, value):
         self.name = name
@@ -279,62 +440,6 @@ class Category:
         print()
         press_key_to_continue()
 
-    @staticmethod
-    def choose_category():
-        """This method is called anytime we need an instance of a Category.
-        Once the user selects a category, we create an instance of it.
-        Then we can call instance methods on that category."""
-
-        num_categories = 0
-        category_dict = {}
-
-        cur = conn.cursor()
-        cur.execute("SELECT name FROM Categories")
-
-        while True:
-            try:
-                category_dict[num_categories + 1] = cur.fetchone()[0]
-            except TypeError:
-                # cur.fetchone() returns None at the end of the query,
-                # which is non-subscriptable.
-                if num_categories == 0:
-                    print(
-                        "\nYou have no categories! You should make some!")
-                    press_key_to_continue()
-                break
-            else:
-                if num_categories == 0:
-                    print("\nWhich category do you want to select?")
-                num_categories += 1
-                print("\t%s)" % num_categories,
-                      category_dict[num_categories])
-
-        if num_categories > 0:
-            choice_number = input_validation(
-                "Enter the number in front of the category you wish to "
-                "select, or enter 0 to cancel: ",
-                int,
-                num_lb=0,
-                num_ub=num_categories
-            )
-
-            if choice_number > 0:
-                # Create object instance and copy data into memory.
-                cur.execute("SELECT * FROM Categories WHERE name=?",
-                            (category_dict[choice_number],))
-                temp = cur.fetchall()[0]
-                selected_category = Category(
-                    name=temp[0],
-                    value=temp[1]
-                    )
-                print("\nYou have selected the {} category.".format(
-                    selected_category.name))
-                cur.close()
-                press_key_to_continue()
-                return selected_category
-
-        cur.close()
-        return None
 
     def update_category_name(self):
         """Given a Category instance, allow user to update the instance's
@@ -470,7 +575,7 @@ class Category:
             elif choice == 2:
                 Category.new_category()
             elif choice == 3:
-                instance = Category.choose_category()
+                instance = Category.choose_x()
                 if instance is not None:
                     # Object instance is now in memory.
                     # Present user with category instance menu.
@@ -496,10 +601,33 @@ class Category:
             elif choice == 4:
                 break
 
+    @staticmethod
+    def instantiate(attributes):
+        """Given the attribute fields as input, this method instantiates a
+        single object and returns it. The database query that produces the
+        input is performed elsewhere. The order of the attributes in the
+        inputs (represented by the index subscript) must match up with the
+        order of the attributes in the code below."""
+
+        return Category(
+            name=attributes[0],
+            value=attributes[1]
+            )
+
 # ____________________________________________________________________________#
 
 
-class Transaction:
+class Transaction(BaseClass):
+
+    table_name = "Transactions"
+    display_col_names = [
+        "payee",
+        "amount",
+        "date",
+        "account",
+        "category",
+        "memo"
+        ]
 
     def __init__(self, uid, account, category, amount, payee, date, memo):
         self.uid = uid
@@ -939,71 +1067,6 @@ class Transaction:
         press_key_to_continue()
 
 
-    @staticmethod
-    def choose_transaction():
-        """This method is called anytime we need an instance of a transaction.
-        Once the user selects a transaction, we create an instance of it.
-        Then we can call instance methods on that transaction."""
-
-        # TODO: Currently shows only uid, change to a different attribute(s)
-
-        num_transactions = 0
-        transactions_dict = {}
-
-        cur = conn.cursor()
-        cur.execute("SELECT * FROM Transactions")
-
-        while True:
-            try:
-                transactions_dict[num_transactions + 1] = cur.fetchone()[0]
-            except TypeError:
-                # cur.fetchone() returns None at the end of the query,
-                # which is non-subscriptable.
-                if num_transactions == 0:
-                    print(
-                        "\nYou have no transactions! You should add some!")
-                    press_key_to_continue()
-                break
-            else:
-                if num_transactions == 0:
-                    print("\nWhich transaction do you want to select?")
-                num_transactions += 1
-                print("\t%s)" % num_transactions,
-                      transactions_dict[num_transactions])
-
-        if num_transactions > 0:
-            choice_number = input_validation(
-                "Enter the number in front of the transaction you wish to "
-                "select, or enter 0 to cancel: ",
-                int,
-                num_lb=0,
-                num_ub=num_transactions
-            )
-
-            if choice_number > 0:
-                # Create object instance and copy data into memory.
-                cur.execute("SELECT * FROM Transactions WHERE uid=?",
-                            (transactions_dict[choice_number],))
-                temp = cur.fetchall()[0]
-                selected_transaction = Transaction(
-                    uid=temp[0],
-                    account=temp[1],
-                    category=temp[2],
-                    amount=temp[3],
-                    payee=temp[4],
-                    date=temp[5],
-                    memo=temp[6]
-                    )
-                print("\nYou have selected the {} transaction.".format(
-                    selected_transaction.uid))
-                cur.close()
-                press_key_to_continue()
-                return selected_transaction
-
-        cur.close()
-        return None
-
-
     def update_transaction_payee(self):
         pass
 
@@ -1038,7 +1101,7 @@ class Transaction:
             elif choice == 2:
                 Transaction.new_transaction()
             elif choice == 3:
-                instance = Transaction.choose_transaction()
+                instance = Transaction.choose_x()
                 if instance is not None:
                     # Object instance is now in memory.
                     # Present user with transaction instance menu.
@@ -1077,6 +1140,24 @@ class Transaction:
                           "transaction menu.~~")
             elif choice == 4:
                 break
+
+    @staticmethod
+    def instantiate(attributes):
+        """Given the attribute fields as input, this method instantiates a
+        single object and returns it. The database query that produces the
+        input is performed elsewhere. The order of the attributes in the
+        inputs (represented by the index subscript) must match up with the
+        order of the attributes in the code below."""
+
+        return Transaction(
+            uid=attributes[0],
+            account=attributes[1],
+            category=attributes[2],
+            amount=attributes[3],
+            payee=attributes[4],
+            date=attributes[5],
+            memo=attributes[6]
+            )
 
 # ____________________________________________________________________________#
 
