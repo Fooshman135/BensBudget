@@ -57,13 +57,19 @@ CATEGORY_MENU_OPTIONS = ["see your list of budget categories,",
 CATEGORY_INSTANCE_OPTIONS = ["edit the category's name,",
                              "edit the category's value,",
                              "delete the category,",
-                             "return to the category menu."]
+                             "return to the category menu."
+                             ]
 
 ACCOUNT_MENU_OPTIONS = ["see your list of accounts,",
                         "add a new account,",
-                        "delete an existing account,",
+                        "modify an existing account,",
                         "return to the main menu."
                         ]
+
+ACCOUNT_INSTANCE_OPTIONS = ["edit the account's name,",
+                            "delete the account,",
+                            "return to the account menu."
+                            ]
 
 TRANSACTION_MENU_OPTIONS = ["view your transactions,",
                             "add a new transaction,",
@@ -150,11 +156,8 @@ class BaseClass (metaclass=ABCMeta):
                 concat
                 )
             print("{}{}".format(" "*left_margin, output))
-
-
         print()
         press_key_to_continue()
-
 
 
     @classmethod
@@ -169,10 +172,8 @@ class BaseClass (metaclass=ABCMeta):
         query_results = cur.fetchall()
 
         if len(query_results) == 0:
-            print("\nYou have no {}! You should make some!".format(
-                cls.__name__.lower()
-                )
-            )
+            print("\nYou have none! Try again when you've created at"
+                  " least one {}.".format(cls.__name__.lower()))
             press_key_to_continue()
             cur.close()
             return None
@@ -181,7 +182,6 @@ class BaseClass (metaclass=ABCMeta):
             object_list.append(cls.instantiate(i))
         cur.close()
         return object_list
-
 
 
     @staticmethod
@@ -401,8 +401,8 @@ class Category(BaseClass):
             return confirmation
 
         # Ask the user to confirm that the category should be deleted.
-        text = "Are you sure that you want to delete the {} category? ".format(
-                self.name)
+        text = "\nAre you sure that you want to delete the" \
+               " {} category? ".format(self.name)
         confirmation = input_validation(
             text+"Enter 1 for yes, 0 for no: ",
             int,
@@ -412,8 +412,7 @@ class Category(BaseClass):
         if confirmation == 1:
             # Delete the category.
             Category.unassigned_funds += self.value
-            cur.execute("DELETE FROM Categories WHERE name=?",
-                        (self.name,))
+            cur.execute("DELETE FROM Categories WHERE name=?", (self.name,))
             conn.commit()
             print("\nYou have successfully deleted %s from your"
                   " list of categories." % self.name)
@@ -575,7 +574,7 @@ class Category(BaseClass):
                             instance.update_category_value()
                         elif choice2 == 3:
                             confirmation = instance.delete_category()
-                            if confirmation == 1:
+                            if confirmation:
                                 break
                         elif choice2 == 4:
                             break
@@ -838,7 +837,7 @@ class Transaction(BaseClass):
         # Now assign a UID to the transaction.
         cur.execute("SELECT MAX(uid) FROM Transactions")
         uid_max = cur.fetchall()
-        instance.uid = 1 if uid_max[0][0] == None else uid_max[0][0] + 1
+        instance.uid = 1 if uid_max[0][0] is None else uid_max[0][0] + 1
 
 
         # It's finally time to add this record to the database.
@@ -918,8 +917,8 @@ class Transaction(BaseClass):
 
         else:
             # Ask the user to confirm that the transaction should be deleted.
-            output = "Are you sure that you want to delete this transaction?" \
-                   " Enter 1 for yes, 0 for no: "
+            output = "\nAre you sure that you want to delete this" \
+                     " transaction? Enter 1 for yes, 0 for no: "
             confirmation = input_validation(
                 output,
                 int,
@@ -1020,7 +1019,7 @@ class Transaction(BaseClass):
                             instance.update_transaction_memo()
                         elif choice2 == 7:
                                 confirmation = instance.delete_transaction()
-                                if confirmation == 1:
+                                if confirmation:
                                     break
                         elif choice2 == 8:
                             break
@@ -1050,11 +1049,17 @@ class Transaction(BaseClass):
 # ____________________________________________________________________________#
 
 
-class Account:
+class Account(BaseClass):
 
     # TODO: Implement choose_account method and account_instance_menu, just like categories. Except don't include update_account_balance (instead offer to create new transaction with this account).
 
     total_account_balance = 0
+    tot_account_bal_name = "Total Account Balance"
+    table_name = "Accounts"
+    display_col_names = [
+        "name",
+        "balance"
+        ]
 
     def __init__(self, name, balance):
         self.name = name
@@ -1073,7 +1078,7 @@ class Account:
                 " Enter a blank line to cancel: ",
                 str,
                 empty_string_allowed=True
-            )
+                )
 
             if name == '':
                 # User wants to cancel this decision.
@@ -1105,8 +1110,24 @@ class Account:
         # Account name and balance have been approved, so add them to the
         # accounts table in the database.
         cur.execute('INSERT INTO Accounts VALUES(?,?)', (name, balance))
-        cur.close()
         conn.commit()
+
+        # Create a transaction for the starting balance.
+        cur.execute("SELECT MAX(uid) FROM Transactions")
+        uid_max = cur.fetchall()
+        temp_uid = 1 if uid_max[0][0] is None else uid_max[0][0] + 1
+        cur.execute("INSERT INTO Transactions Values(?,?,?,?,?,?,?)", (
+            temp_uid,
+            name,
+            None,
+            balance,
+            "Starting Balance",
+            dt.today(),
+            None
+            )
+        )
+        conn.commit()
+        cur.close()
 
         # Finally, update the class attribute for total account balance.
         cls.total_account_balance += balance
@@ -1115,197 +1136,110 @@ class Account:
         print("\nOkay! You added a new account called %s to your list!" % name)
         press_key_to_continue()
 
-    @classmethod
-    def delete_account(cls):
+    def delete_account(self):
         """Present user with list of existing accounts, then delete the one
          corresponding to the user's selection."""
 
-        num_accounts = 0
-        # account_dict maps the user-supplied integer to an account record.
-        account_dict = {}
-
+        # Confirm that there are zero transactions assigned to this account.
         cur = conn.cursor()
-        cur.execute("SELECT name FROM Accounts")
-
-        while True:
-            try:
-                account_dict[num_accounts + 1] = cur.fetchone()[0]
-            except TypeError:
-                # cur.fetchone() returns None at the end of the query,
-                # which is non-subscriptable.
-                if num_accounts == 0:
-                    print("\nYou have no accounts! You should add some!")
-                    press_key_to_continue()
-                break
+        sql = "SELECT COUNT(*) FROM Transactions WHERE Account=?"
+        cur.execute(sql, (self.name,))
+        temp = cur.fetchone()[0]
+        if temp > 0:
+            # There are transactions assigned to this account.
+            if temp == 1:
+                output = "There is 1 transaction assigned to {}." \
+                         " Reassign that transaction to another" \
+                         " account or delete it, and then try" \
+                         " again.".format(self.name)
             else:
-                if num_accounts == 0:
-                    print("\nWhich account do you want to delete?")
-                num_accounts += 1
-                print("\t%s)" % num_accounts, account_dict[num_accounts])
-
-        if num_accounts > 0:
-            choice_num = input_validation(
-                "Enter the number in front of the account you wish to delete,"
-                " or enter 0 to cancel: ",
-                int,
-                num_lb=0,
-                num_ub=num_accounts
-            )
-
-            if choice_num > 0:
-                # Check to see if there are any transactions for this account.
-                cur = conn.cursor()
-                sql = "SELECT COUNT(*) FROM Transactions WHERE Account=?"
-                cur.execute(sql, (account_dict[choice_num],))
-                temp = cur.fetchone()[0]
-                if temp > 0:
-                    # There are transactions assigned to this account.
-                    if temp == 1:
-                        output = "There is 1 transaction assigned to {}." \
-                                 " Reassign that transaction to another" \
-                                 " account or delete it, and then try" \
-                                 " again.".format(account_dict[choice_num])
-                    else:
-                        output = "There are {} transactions assigned to {}." \
-                                 " Reassign those transactions to other" \
-                                 " accounts or delete them, and then try" \
-                                 " again.".format(
-                                    temp,
-                                    account_dict[choice_num]
-                                    )
-                    print("\n%s" % output)
-                    cur.close()
-                    press_key_to_continue()
-                    return
-
-                # Check to see if unassigned funds will become negative.
-                # If so, prompt user to change category values first.
-                cur.execute("SELECT balance FROM Accounts WHERE name=?",
-                            (account_dict[choice_num],))
-                temp = cur.fetchall()[0][0]
-                if Category.unassigned_funds - temp < 0:
-                    output = "This account's balance (${:,.2f}) exceeds the" \
-                             " amount of unassigned funds (${:,.2f}), so it" \
-                             " can't be deleted yet.".format(
-                                temp,
-                                Category.unassigned_funds
-                                )
-                    print("\n%s" % output)
-                    output = "Please free up at least ${:,.2f} from your" \
-                             " categories' values before deleting this" \
-                             " account.".format(temp-Category.unassigned_funds)
-                    print(output)
-                    press_key_to_continue()
-                else:
-                    # Ask the user to confirm that the category should be
-                    # deleted.
-                    text = "Are you sure that you want to delete the {} " \
-                           "account? ".format(account_dict[num_accounts])
-                    confirmation = input_validation(
-                        text + "Enter 1 for yes, 0 for no: ",
-                        int,
-                        num_lb=0,
-                        num_ub=1
-                        )
-                    if confirmation == 1:
-                        # Delete the account.
-                        # Update class attribute before deleting
-                        # record from table.
-                        cls.total_account_balance -= temp
-                        Category.unassigned_funds -= temp
-
-                        # Now okay to delete record.
-                        cur.execute("DELETE FROM Accounts WHERE name=?",
-                                    (account_dict[choice_num],))
-                        conn.commit()
-                        text = "You have successfully deleted %s from your " \
-                               "list of accounts." % account_dict[choice_num]
-                        print("\n%s" % text)
-                        press_key_to_continue()
-        cur.close()
-
-    @classmethod
-    def display_accounts(cls):
-        """Query the names and balances of the user's accounts and present them
-        in a vertical list."""
-
-        # TODO: Use with statement to open and close the cursor.
-        # TODO: Fix floating point errors for large numbers. Use "decimal" module?
-
-        # Here is how to interpret the string format specifiers below:
-        # Let's look at {:>{pad2},.2f} as an example.
-        # The ':' means the following characters are 'format_specs'.
-        # The '>' means right-justified.
-        # The '{pad2}' is a nested format specifier.
-        #   Here it simply contains a variable.
-        # The ',' groups the digits into sets of 3, separated by a comma.
-        # The '.2f' means show two digits after the decimal place.
-        #   Note that the 'f' in '.2f' specifies fixed point.
-
-        cur = conn.cursor()
-        cur.execute("SELECT name, balance FROM Accounts")
-        instance_list = [Account(name=i[0], balance=i[1])
-                         for i in cur.fetchall()]
-
-        if len(instance_list) == 0:
-            # The Accounts table contains no data
-            print("\nYou have no accounts! You should add some!")
+                output = "There are {} transactions assigned to {}." \
+                         " Reassign those transactions to other" \
+                         " accounts or delete them, and then try" \
+                         " again.".format(
+                            temp,
+                            self.name
+                            )
+            print("\n%s" % output)
             cur.close()
             press_key_to_continue()
-            return
+            confirmation = 0
+            return confirmation
 
-        # Now determine the longest name and balance (when printed).
-        total_balance_string = "${:,.2f}".format(cls.total_account_balance)
-        max_balance_length = len(total_balance_string)
-        max_name_length = len("Total Balance")
-        for account in instance_list:
-            if len(account.name) > max_name_length:
-                max_name_length = len(account.name)
+        # Ask the user to confirm that the account should be deleted.
+        text = "\nAre you sure that you want to delete the {} " \
+               "account? ".format(self.name)
+        confirmation = input_validation(
+            text + "Enter 1 for yes, 0 for no: ",
+            int,
+            num_lb=0,
+            num_ub=1
+            )
+        if confirmation == 1:
+            # Delete the account.
+            cur.execute("DELETE FROM Accounts WHERE name=?", (self.name,))
+            conn.commit()
+            text = "You have successfully deleted %s from your " \
+                   "list of accounts." % self.name
+            print("\n%s" % text)
+            cur.close()
+            press_key_to_continue()
+        return confirmation
 
-        # Print each account row by row.
-        print("\nHere are your accounts and their balances:\n")
-        for account in instance_list:
-            display_balance = "${:,.2f}".format(account.balance)
-            output = "{:{pad1}}    {:>{pad2}}".format(
-                account.name,
-                display_balance,
-                pad1=max_name_length,
-                pad2=max_balance_length
-                )
-            print("\t%s" % output)
-
-        # Finally, display the total account balance.
-        display_total_balance = "${:,.2f}".format(cls.total_account_balance)
-        final_line_output = "{:{pad1}}    {:>{pad2}}".format(
-            "Total Balance",
-            display_total_balance,
-            pad1=max_name_length,
-            pad2=max_balance_length)
-        print("\t%s" % ("-"*len(final_line_output)))
-        print("\t%s" % final_line_output)
-
-        cur.close()
-        print()
-        press_key_to_continue()
-
-    @staticmethod
-    def menu_for_accounts():
+    @classmethod
+    def menu_for_accounts(cls):
         """Provide user with information regarding the accounts menu then
         direct them to the appropriate functions."""
 
         print("\n~~You are now in the accounts menu.~~")
-
         while True:
             menu_header({"ACCOUNTS MENU": ""})
             choice = recite_menu_options(ACCOUNT_MENU_OPTIONS)
             if choice == 1:
-                Account.display_accounts()
+                Account.display_x(
+                    cls.total_account_balance,
+                    cls.tot_account_bal_name
+                    )
             elif choice == 2:
                 Account.new_account()
             elif choice == 3:
-                Account.delete_account()
+                instance = Account.choose_x()
+                if instance is not None:
+                    # Object instance is now in memory.
+                    # Present user with transaction instance menu.
+                    while True:
+                        # Display the selected account's attributes at the
+                        # top of the menu.
+                        menu_header({
+                            "Name:": instance.name,
+                            "Balance:": instance.balance,
+                            })
+                        choice2 = recite_menu_options(
+                            ACCOUNT_INSTANCE_OPTIONS)
+                        if choice2 == 1:
+                            instance.update_account_name()
+                        elif choice2 == 2:
+                            confirmation = instance.delete_account()
+                            if confirmation:
+                                break
+                        elif choice2 == 3:
+                            break
+                    print("\n~~You are now returning to the account menu.~~")
             elif choice == 4:
                 break
+
+    @staticmethod
+    def instantiate(attributes):
+        """Given the attribute fields as input, this method instantiates a
+        single object and returns it. The database query that produces the
+        input is performed elsewhere. The order of the attributes in the
+        inputs (represented by the index subscript) must match up with the
+        order of the attributes in the code below."""
+
+        return Account(
+            name=attributes[0],
+            balance=attributes[1]
+            )
 
 # ____________________________________________________________________________#
 
@@ -1676,6 +1610,9 @@ def input_validation(
             except ValueError:
                 print("\nInvalid entry, not a real date.")
                 continue
+        else:
+            raise Exception("Ben Katz - developer error.")
+
 
         # user_input is good to go.
         break
