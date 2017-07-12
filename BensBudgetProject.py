@@ -126,15 +126,12 @@ class BaseClass (metaclass=ABCMeta):
         else:
             return None
 
-
     @classmethod
     def display_x(cls, summary_attr=None, summary_attr_name=None):
 
         # TODO: Use with statement to open and close the cursor.
         # TODO: Fix floating point errors for large numbers. Use "decimal" module?
         # TODO: If categories have negative balances, alert the user.
-
-        left_margin = 5
 
         name_lowercase = cls.__name__.lower()
         object_list = cls.database_to_memory()
@@ -145,20 +142,18 @@ class BaseClass (metaclass=ABCMeta):
             object_list,
             cls.display_col_names,
             )
+        print()
 
         # Now show an (optional) summary metric.
         if summary_attr is not None:
-            print()
             minus = "-$" if summary_attr < 0 else "$"
             concat = minus + "{:,.2f}".format(abs(summary_attr))
-            output = "{}: {}".format(
+            output = "Your {} is currently {}.".format(
                 summary_attr_name,
                 concat
                 )
-            print("{}{}".format(" "*left_margin, output))
-        print()
+            print(output)
         press_key_to_continue()
-
 
     @classmethod
     def database_to_memory(cls):
@@ -182,7 +177,6 @@ class BaseClass (metaclass=ABCMeta):
             object_list.append(cls.instantiate(i))
         cur.close()
         return object_list
-
 
     @staticmethod
     def print_rows(table, col_names, show_nums=False):
@@ -285,6 +279,383 @@ class BaseClass (metaclass=ABCMeta):
                 num += 1
             else:
                 print("{}{}".format(" "*left_margin, output))
+
+
+    def update_attribute(self, attr_str):
+
+        cur = conn.cursor()
+
+        titlecase = False
+        flag = False
+        lower = float('-inf')
+        upper = float('inf')
+
+
+        if self.__class__.__name__ == 'Category':
+            primary_key_name = 'name'
+            primary_key_value = self.name
+        elif self.__class__.__name__ == 'Transaction':
+            primary_key_name = 'uid'
+            primary_key_value = self.uid
+        elif self.__class__.__name__ == 'Account':
+            primary_key_name = 'name'
+            primary_key_value = self.name
+        else:
+            raise Exception("Ben Katz - developer error.")
+
+
+        # Report the attribute's current value.
+        old_attr = getattr(self, attr_str)
+        new_type = type(old_attr)
+        if type(old_attr) == str:
+            old_value = old_attr
+            empty = True
+        elif type(old_attr) == int:
+            old_value = old_attr
+            empty = False
+        elif type(old_attr) == float:
+            minus = "-$" if old_attr < 0 else "$"
+            old_value = "{}{:,.2f}".format(minus, abs(old_attr))
+            empty = True
+        elif type(old_attr) == dt:
+            old_value = old_attr.strftime('%m/%d/%Y')
+            empty = True
+        elif old_attr is None:
+            old_value = "not set"
+            empty = True
+            if attr_str == 'memo':
+                new_type = str
+            elif attr_str == 'category':
+                new_type = int
+            else:
+                raise Exception("Ben Katz - developer error.")
+        else:
+            raise Exception("Ben Katz - developer error.")
+
+
+        text = "Your {}'s {} is currently {}.".format(
+            self.__class__.__name__.lower(),
+            attr_str,
+            old_value
+            )
+        print("\n%s" % text)
+
+        output = "Enter a new {} for this {} (or enter a blank line" \
+                 " to cancel): ".format(
+                    attr_str,
+                    self.__class__.__name__.lower()
+                    )
+
+        # If applicable, provide info about limiting input.
+        # Check for special cases where value can't be changed right now.
+        if self.__class__.__name__ == 'Category' and attr_str == 'value':
+            text = "Your total amount of unassigned funds is ${:,.2f}.".format(
+                Category.unassigned_funds)
+            print(text)
+            if old_attr <= 0 and Category.unassigned_funds == 0:
+                # In this special case, user can't make any changes.
+                print("Since neither of these are positive, you can't update"
+                      " the value right now.")
+                press_key_to_continue()
+                cur.close()
+                return
+
+            upper = Category.unassigned_funds + old_attr
+            lower = min(0, old_attr)
+            if old_attr < 0:
+                output = "Select a new amount for the category's value " \
+                         "(must be greater than the current amount and " \
+                         "preferably non-negative): "
+            else:
+                output = "Select a new amount for the category's value " \
+                         "(must be non-negative): "
+
+        elif self.__class__.__name__ == 'Transaction' and attr_str == 'payee':
+            titlecase = True
+        elif self.__class__.__name__ == 'Transaction' and attr_str == 'amount':
+            upper = float('inf')
+            sql = "SELECT balance FROM Accounts WHERE name=?"
+            cur.execute(sql, (self.account,))
+            trans_account_bal = cur.fetchall()[0][0]
+            lower = ((-1) * trans_account_bal) + self.amount
+        elif self.__class__.__name__ == 'Transaction' and (
+                        attr_str == 'category' or attr_str == 'account'):
+            if attr_str == 'category':
+                if self.amount > 0:
+                    # Income transaction, allows user to select None
+                    # for category.
+                    text = "Since this is an income transaction, you can " \
+                           "choose to leave the category field blank."
+                    print(text)
+                    output = "Press 1 to make it blank, 2 to select a " \
+                             "category, or 0 to cancel: "
+                    choice = input_validation(
+                        output,
+                        int,
+                        num_lb=0,
+                        num_ub=2
+                        )
+                    if choice == 0:
+                        obj = None
+                    elif choice == 1:
+                        # Create a temporary Categories object whose
+                        # attributes are all None.
+                        obj = Category.instantiate((None, None))
+                    elif choice == 2:
+                        obj = Category.choose_x()
+                else:
+                    obj = Category.choose_x()
+
+            else:
+                # Make sure that the transaction's current account can
+                # afford to lose the transaction (if it is income).
+                cur.execute("SELECT balance FROM Accounts WHERE name=?",
+                            (self.account,))
+                old_account_bal = cur.fetchall()[0][0]
+                if old_account_bal < self.amount:
+                    # The old account's balance is too low.
+                    print("The balance of this transaction's current account "
+                          "would become negative if this transaction were "
+                          "to be reassigned. You can't edit the account "
+                          "at this time.")
+                    press_key_to_continue()
+                    cur.close()
+                    return
+
+                # User will choose an account (or will choose to cancel).
+                # Make sure the account the user selects won't become negative.
+                while True:
+                    obj = Account.choose_x()
+                    if obj is None:
+                        break
+                    if obj.balance < abs(self.amount) and self.amount < 0:
+                        # The new account's balance is too low.
+                        print("\nThe balance of the account you selected is"
+                              " too low, so you can't select it at this time.")
+                        continue
+                    break
+
+            if obj is None:
+                # User wants to cancel.
+                cur.close()
+                return
+            else:
+                new_attr = obj.name
+                if new_attr == old_attr:
+                    # Input is the same as the current value.
+                    print("\nNo change was made.")
+                    press_key_to_continue()
+                    cur.close()
+                    return
+                flag = True
+
+        if flag == False:
+            while True:
+                new_attr = input_validation(
+                    output,
+                    new_type,
+                    num_lb=lower,
+                    num_ub=upper,
+                    is_titlecased=titlecase,
+                    empty_string_allowed=empty
+                    )
+
+
+                if new_attr == '':
+                    # User either wants to cancel this decision, or
+                    # clear the field.
+                    if (attr_str == 'memo' or (
+                                    attr_str == 'category' and
+                                    old_attr > 0)) and old_attr is not None:
+                        output = "\nWhich action do you want to take?\n\t" \
+                                 "1) Clear the field\n\t2) Cancel"
+                        print(output)
+                        output = "Enter the corresponding number of" \
+                                 " your answer: "
+                        blank_choice = input_validation(
+                            output,
+                            int,
+                            num_lb=1,
+                            num_ub=2
+                            )
+                        if blank_choice == 1:
+                            # Clear the field.
+                            new_attr = None
+                        else:
+                            # Cancel.
+                            cur.close()
+                            return
+                    else:
+                        # The field can't be cleared, so cancel this decision.
+                        cur.close()
+                        return
+
+                if new_attr == old_attr:
+                    # Input is the same as the current value.
+                    print("\nNo change was made.")
+                    press_key_to_continue()
+                    cur.close()
+                    return
+
+                if attr_str == primary_key_name:
+                    # Need to check if input appears elsewhere in the table.
+                    sql = "SELECT name FROM {} WHERE {}=?".format(
+                        self.table_name,
+                        primary_key_name
+                        )
+                    cur.execute(sql, (new_attr,))
+                    check2 = cur.fetchall()
+                    if len(check2) > 0:
+                        text = "A {} already exists with that {}. Please" \
+                               " choose a different {}.".format(
+                            self.__class__.__name__.lower(),
+                            attr_str,
+                            attr_str
+                            )
+                        print("\n%s" % text)
+                        continue
+                break
+
+        # Update the database for this record.
+        sql = "UPDATE {} SET {}=? WHERE {}=?".format(
+            self.table_name,
+            attr_str,
+            primary_key_name
+            )
+        cur.execute(sql, (new_attr, primary_key_value))
+        conn.commit()
+
+        # Also update the database for other records which depend
+        # on this record.
+        if attr_str == primary_key_name:
+            # Need to update other records which depend on this record.
+            sql = "UPDATE Transactions SET {}=? WHERE {}=?".format(
+                self.__class__.__name__.lower(),
+                self.__class__.__name__.lower()
+                )
+            cur.execute(sql, (new_attr, old_attr))
+            conn.commit()
+        if self.__class__.__name__ == 'Transaction' and attr_str == "amount":
+            # Update associated account balance.
+            sql = "UPDATE Accounts SET balance=? WHERE name=?"
+            cur.execute(sql, (trans_account_bal + new_attr - old_attr,
+                              self.account))
+            conn.commit()
+
+            # Update associated category value (if there is one).
+            sql = "SELECT value FROM Categories WHERE name=?"
+            cur.execute(sql, (self.category,))
+            temp = cur.fetchall()
+            if len(temp) == 0:
+                # There is no associated Category for this transaction.
+                # Update unassigned_funds.
+                Category.unassigned_funds += (new_attr - old_attr)
+
+                if new_attr < 0:
+                    # Transaction was switched from income to expense, and
+                    # it has no category assigned to it.
+                    text = "Since you changed this transaction from income " \
+                           "to an expense, it now needs a category assigned " \
+                           "to it."
+                    print("\n%s" % text)
+
+                    while True:
+                        cat_obj = Category.choose_x()
+
+                        if cat_obj is None:
+                            # User wants to cancel, but they're not allowed to.
+                            print("\nYou can't cancel this decision! Select "
+                                  "a category to assign to this transaction.")
+                            continue
+                        break
+
+                    sql = "UPDATE Transactions SET category=? WHERE uid=?"
+                    cur.execute(sql, (cat_obj.name, self.uid))
+                    conn.commit()
+
+                    sql = "SELECT value FROM Categories WHERE name=?"
+                    cur.execute(sql, (cat_obj.name,))
+                    temp = cur.fetchall()[0][0]
+                    sql = 'UPDATE Categories SET value=? WHERE name=?'
+                    cur.execute(sql, (temp + new_attr, cat_obj.name))
+                    conn.commit()
+
+            else:
+                # Update associated category value.
+                temp = temp[0][0]
+                sql = "UPDATE Categories SET value=? WHERE name=?"
+                cur.execute(sql, (temp + new_attr - old_attr, self.category))
+                conn.commit()
+
+            Account.total_account_balance -= (old_attr - new_attr)
+
+        elif self.__class__.__name__ == 'Category' and attr_str == "value":
+            # Update unassigned_funds.
+            Category.unassigned_funds -= (new_attr - old_attr)
+
+        elif (self.__class__.__name__ == 'Transaction' and
+                attr_str == "account"):
+            # Update old account balance.
+            cur.execute('UPDATE Accounts SET balance=? WHERE name=?',
+                        (old_account_bal - self.amount, self.account))
+            conn.commit()
+
+            # Update new account balance.
+            cur.execute("SELECT balance FROM Accounts WHERE name=?",
+                        (new_attr,))
+            temp = cur.fetchall()[0][0]
+            cur.execute('UPDATE Accounts SET balance=? WHERE name=?',
+                        (temp + self.amount, new_attr))
+            conn.commit()
+
+        elif (self.__class__.__name__ == 'Transaction' and
+                attr_str == "category"):
+            if self.category is None:
+                Category.unassigned_funds -= self.amount
+            else:
+                # Update old category value.
+                cur.execute("SELECT value FROM Categories WHERE name=?",
+                            (self.category,))
+                temp = cur.fetchall()[0][0]
+                cur.execute('UPDATE Categories SET value=? WHERE name=?',
+                            (temp - self.amount, self.category))
+                conn.commit()
+
+            if new_attr is None:
+                Category.unassigned_funds += self.amount
+            else:
+                # Update new category value.
+                cur.execute("SELECT value FROM Categories WHERE name=?",
+                            (new_attr,))
+                temp = cur.fetchall()[0][0]
+                cur.execute('UPDATE Categories SET value=? WHERE name=?',
+                            (temp + self.amount, new_attr))
+                conn.commit()
+
+        # Update variable in memory
+        setattr(self, attr_str, new_attr)
+
+        # Inform the user of the result.
+        if type(new_attr) == float:
+            minus = "-$" if new_attr < 0 else "$"
+            new_value = "{}{:,.2f}".format(minus, abs(new_attr))
+        elif type(new_attr) == dt:
+            new_value = new_attr.strftime('%m/%d/%Y')
+        elif new_attr is None:
+            new_value = 'not set'
+        else:
+            new_value = new_attr
+
+        output = "You have changed the {} {} from {} to {}.".format(
+            self.__class__.__name__.lower(),
+            attr_str,
+            old_value,
+            new_value
+            )
+        print("\n%s" % output)
+
+        cur.close()
+        press_key_to_continue()
 
 # ____________________________________________________________________________#
 
@@ -420,123 +791,6 @@ class Category(BaseClass):
             press_key_to_continue()
         return confirmation
 
-    def update_category_name(self):
-        """Given a Category instance, allow user to update the instance's
-        name."""
-
-        print("\nYour category name is currently {}.".format(self.name))
-        output = "What would you like to rename it as? " \
-                 "Enter a blank line to cancel: "
-        cur = conn.cursor()
-        while True:
-            name = input_validation(
-                output,
-                str,
-                empty_string_allowed=True
-            )
-
-            if name == '':
-                # User wants to cancel this decision.
-                cur.close()
-                return
-
-            if name == self.name:
-                # User typed the same name as what the category already has.
-                print("\nCategory name will remain {}.".format(self.name))
-                cur.close()
-                press_key_to_continue()
-                return
-
-            cur.execute("SELECT name FROM Categories WHERE name=?", (name,))
-            check = cur.fetchall()
-            if not check:
-                # The name which the user entered is not already
-                # in the Categories table.
-                break
-            else:
-                print("\nA category already exists with that name. "
-                      "Please choose a different name.\n")
-                continue
-
-        # Name has been approved, so update the database.
-        cur.execute("UPDATE Categories SET name=? WHERE name=?",
-                    (name, self.name))
-        conn.commit()
-        cur.close()
-
-        # Inform the user of the result.
-        output = "You have changed the category name from {} to {}.".format(
-            self.name,
-            name
-            )
-        print("\n%s" % output)
-        self.name = name
-        press_key_to_continue()
-
-    def update_category_value(self):
-        """Given a Category instance, allow user to update the instance's
-         value."""
-
-        minus = "-$" if self.value < 0 else "$"
-
-        output = "Your {} category currently has a value of {}{:,.2f}.".format(
-            self.name,
-            minus,
-            abs(self.value)
-            )
-        print("\n%s" % output)
-        output = "Your total amount of unassigned funds is ${:,.2f}.".format(
-            Category.unassigned_funds)
-        print(output)
-
-        # In the special case where both the category and the unassigned
-        # funds have $0, don't make user enter any input.
-        if Category.unassigned_funds == 0 and self.value <= 0:
-            print("Since neither of these are positive, you can't update the "
-                  "value right now.")
-            press_key_to_continue()
-            return
-
-        if self.value < 0:
-            lower = 0
-            output = "Select a positive amount to add to the " \
-                     "category's value: "
-        else:
-            lower = self.value*(-1)+0
-            output = "Select an amount to add to the category's value " \
-                     "(negative amounts will be subtracted from the value): "
-
-        diff = input_validation(
-            output,
-            float,
-            num_lb=lower,
-            num_ub=Category.unassigned_funds
-            )
-
-        # Update the class attributes
-        self.value += diff
-        Category.unassigned_funds -= diff
-
-        # Now to update the value in the database.
-        cur = conn.cursor()
-        cur.execute("UPDATE Categories SET value=? WHERE name=?",
-                    (self.value, self.name))
-        conn.commit()
-
-        # Inform the user of the result.
-        if diff == 0:
-            output = "No change was made to the category's value."
-        elif diff > 0:
-            output = "You added an additional ${:,.2f} to the {} category's" \
-                     " value.".format(diff, self.name)
-        elif diff < 0:
-            output = "You subtracted ${:,.2f} from the {} category's" \
-                     " value.".format(diff*(-1), self.name)
-
-        print("\n%s" % output)
-        cur.close()
-        press_key_to_continue()
-
     @classmethod
     def menu_for_categories(cls):
         """Provide user with information regarding the category menu then
@@ -569,9 +823,11 @@ class Category(BaseClass):
                         choice2 = recite_menu_options(
                             CATEGORY_INSTANCE_OPTIONS)
                         if choice2 == 1:
-                            instance.update_category_name()
+                            # instance.update_category_name()
+                            instance.update_attribute('name')
                         elif choice2 == 2:
-                            instance.update_category_value()
+                            # instance.update_category_value()
+                            instance.update_attribute('value')
                         elif choice2 == 3:
                             confirmation = instance.delete_category()
                             if confirmation:
@@ -954,24 +1210,6 @@ class Transaction(BaseClass):
         cur.close()
         return confirmation
 
-    def update_transaction_payee(self):
-        pass
-
-    def update_transaction_category(self):
-        pass
-
-    def update_transaction_account(self):
-        pass
-
-    def update_transaction_memo(self):
-        pass
-
-    def update_transaction_amount(self):
-        pass
-
-    def update_transaction_date(self):
-        pass
-
     @staticmethod
     def menu_for_transactions():
         """Provide user with information regarding the transactions menu then
@@ -1006,17 +1244,23 @@ class Transaction(BaseClass):
                         choice2 = recite_menu_options(
                             TRANSACTION_INSTANCE_OPTIONS)
                         if choice2 == 1:
-                            instance.update_transaction_account()
+                            # instance.update_transaction_account()
+                            instance.update_attribute('account')
                         elif choice2 == 2:
-                            instance.update_transaction_category()
+                            # instance.update_transaction_category()
+                            instance.update_attribute('category')
                         elif choice2 == 3:
-                            instance.update_transaction_amount()
+                            # instance.update_transaction_amount()
+                            instance.update_attribute('amount')
                         elif choice2 == 4:
-                            instance.update_transaction_payee()
+                            # instance.update_transaction_payee()
+                            instance.update_attribute('payee')
                         elif choice2 == 5:
-                            instance.update_transaction_date()
+                            # instance.update_transaction_date()
+                            instance.update_attribute('date')
                         elif choice2 == 6:
-                            instance.update_transaction_memo()
+                            # instance.update_transaction_memo()
+                            instance.update_attribute('memo')
                         elif choice2 == 7:
                                 confirmation = instance.delete_transaction()
                                 if confirmation:
@@ -1051,8 +1295,6 @@ class Transaction(BaseClass):
 
 class Account(BaseClass):
 
-    # TODO: Implement choose_account method and account_instance_menu, just like categories. Except don't include update_account_balance (instead offer to create new transaction with this account).
-
     total_account_balance = 0
     tot_account_bal_name = "Total Account Balance"
     table_name = "Accounts"
@@ -1069,8 +1311,6 @@ class Account(BaseClass):
     def new_account(cls):
         """Prompt the user for a name and a number, then create an account
          with that name and balance."""
-
-        # TODO: Implement starting account balance as a transaction. Automatically set payee as "Starting Balance"
 
         while True:
             name = input_validation(
@@ -1217,7 +1457,7 @@ class Account(BaseClass):
                         choice2 = recite_menu_options(
                             ACCOUNT_INSTANCE_OPTIONS)
                         if choice2 == 1:
-                            instance.update_account_name()
+                            instance.update_attribute('name')
                         elif choice2 == 2:
                             confirmation = instance.delete_account()
                             if confirmation:
@@ -1685,12 +1925,6 @@ Here are ideas of next steps and features:
 -Allow users to create their own subsets of categories (distinct from the idea of super-categories).
     -Allow users to see spending patterns/trends in just that subset.
 -Use regular expressions to check user input (and make sure it's valid).
--Implementing classes and OOP instead of procedural programming:
-    Make a Menu class.
-        And then each menu can be its own object, with its own list of options stored as an attribute.
-        The user's input choice should be stored as an attribute.
-        But how can I avoid the if...elif...elif... chains in the functions that call recite_menu_options() ?
-    Once I implement classes in my code, it might make sense to incorporate an Object-Relational Mapping (ORM) to replace my SQL commands.
 -Implement config files
     config files save user preferences ("configurations")
     Module: configparser
