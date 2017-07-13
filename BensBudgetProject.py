@@ -289,6 +289,12 @@ class BaseClass (metaclass=ABCMeta):
         flag = False
         lower = float('-inf')
         upper = float('inf')
+        empty = True
+        output = "Enter a new {} for this {} (or enter a blank line" \
+                 " to cancel): ".format(
+                    attr_str,
+                    self.__class__.__name__.lower()
+                    )
 
 
         if self.__class__.__name__ == 'Category':
@@ -309,20 +315,16 @@ class BaseClass (metaclass=ABCMeta):
         new_type = type(old_attr)
         if type(old_attr) == str:
             old_value = old_attr
-            empty = True
         elif type(old_attr) == int:
             old_value = old_attr
             empty = False
         elif type(old_attr) == float:
             minus = "-$" if old_attr < 0 else "$"
             old_value = "{}{:,.2f}".format(minus, abs(old_attr))
-            empty = True
         elif type(old_attr) == dt:
             old_value = old_attr.strftime('%m/%d/%Y')
-            empty = True
         elif old_attr is None:
             old_value = "not set"
-            empty = True
             if attr_str == 'memo':
                 new_type = str
             elif attr_str == 'category':
@@ -339,12 +341,6 @@ class BaseClass (metaclass=ABCMeta):
             old_value
             )
         print("\n%s" % text)
-
-        output = "Enter a new {} for this {} (or enter a blank line" \
-                 " to cancel): ".format(
-                    attr_str,
-                    self.__class__.__name__.lower()
-                    )
 
         # If applicable, provide info about limiting input.
         # Check for special cases where value can't be changed right now.
@@ -365,21 +361,22 @@ class BaseClass (metaclass=ABCMeta):
             if old_attr < 0:
                 output = "Select a new amount for the category's value " \
                          "(must be greater than the current amount and " \
-                         "preferably non-negative): "
+                         "preferably non-negative), or a blank line to" \
+                         " cancel: "
             else:
                 output = "Select a new amount for the category's value " \
-                         "(must be non-negative): "
+                         "(must be non-negative), or a blank line to cancel: "
 
         elif self.__class__.__name__ == 'Transaction' and attr_str == 'payee':
             titlecase = True
         elif self.__class__.__name__ == 'Transaction' and attr_str == 'amount':
-            upper = float('inf')
             sql = "SELECT balance FROM Accounts WHERE name=?"
             cur.execute(sql, (self.account,))
             trans_account_bal = cur.fetchall()[0][0]
             lower = ((-1) * trans_account_bal) + self.amount
         elif self.__class__.__name__ == 'Transaction' and (
                         attr_str == 'category' or attr_str == 'account'):
+            flag = True
             if attr_str == 'category':
                 if self.amount > 0:
                     # Income transaction, allows user to select None
@@ -439,15 +436,13 @@ class BaseClass (metaclass=ABCMeta):
                 # User wants to cancel.
                 cur.close()
                 return
-            else:
-                new_attr = obj.name
-                if new_attr == old_attr:
-                    # Input is the same as the current value.
-                    print("\nNo change was made.")
-                    press_key_to_continue()
-                    cur.close()
-                    return
-                flag = True
+            if obj.name == old_attr:
+                # Input is the same as the current value.
+                print("\nNo change was made.")
+                press_key_to_continue()
+                cur.close()
+                return
+            new_attr = obj.name
 
         if flag == False:
             while True:
@@ -460,13 +455,10 @@ class BaseClass (metaclass=ABCMeta):
                     empty_string_allowed=empty
                     )
 
-
                 if new_attr == '':
                     # User either wants to cancel this decision, or
                     # clear the field.
-                    if (attr_str == 'memo' or (
-                                    attr_str == 'category' and
-                                    old_attr > 0)) and old_attr is not None:
+                    if attr_str == 'memo' and old_attr is not None:
                         output = "\nWhich action do you want to take?\n\t" \
                                  "1) Clear the field\n\t2) Cancel"
                         print(output)
@@ -541,6 +533,7 @@ class BaseClass (metaclass=ABCMeta):
             cur.execute(sql, (trans_account_bal + new_attr - old_attr,
                               self.account))
             conn.commit()
+            Account.total_account_balance += (new_attr - old_attr)
 
             # Update associated category value (if there is one).
             sql = "SELECT value FROM Categories WHERE name=?"
@@ -548,9 +541,6 @@ class BaseClass (metaclass=ABCMeta):
             temp = cur.fetchall()
             if len(temp) == 0:
                 # There is no associated Category for this transaction.
-                # Update unassigned_funds.
-                Category.unassigned_funds += (new_attr - old_attr)
-
                 if new_attr < 0:
                     # Transaction was switched from income to expense, and
                     # it has no category assigned to it.
@@ -573,12 +563,20 @@ class BaseClass (metaclass=ABCMeta):
                     cur.execute(sql, (cat_obj.name, self.uid))
                     conn.commit()
 
+                    self.category = cat_obj.name
+
                     sql = "SELECT value FROM Categories WHERE name=?"
                     cur.execute(sql, (cat_obj.name,))
                     temp = cur.fetchall()[0][0]
                     sql = 'UPDATE Categories SET value=? WHERE name=?'
                     cur.execute(sql, (temp + new_attr, cat_obj.name))
                     conn.commit()
+
+                    # Update unassigned_funds.
+                    Category.unassigned_funds -= old_attr
+                else:
+                    # Update unassigned_funds.
+                    Category.unassigned_funds += (new_attr - old_attr)
 
             else:
                 # Update associated category value.
@@ -587,7 +585,6 @@ class BaseClass (metaclass=ABCMeta):
                 cur.execute(sql, (temp + new_attr - old_attr, self.category))
                 conn.commit()
 
-            Account.total_account_balance -= (old_attr - new_attr)
 
         elif self.__class__.__name__ == 'Category' and attr_str == "value":
             # Update unassigned_funds.
@@ -610,7 +607,7 @@ class BaseClass (metaclass=ABCMeta):
 
         elif (self.__class__.__name__ == 'Transaction' and
                 attr_str == "category"):
-            if self.category is None:
+            if old_attr is None:
                 Category.unassigned_funds -= self.amount
             else:
                 # Update old category value.
@@ -823,10 +820,8 @@ class Category(BaseClass):
                         choice2 = recite_menu_options(
                             CATEGORY_INSTANCE_OPTIONS)
                         if choice2 == 1:
-                            # instance.update_category_name()
                             instance.update_attribute('name')
                         elif choice2 == 2:
-                            # instance.update_category_value()
                             instance.update_attribute('value')
                         elif choice2 == 3:
                             confirmation = instance.delete_category()
@@ -959,6 +954,7 @@ class Transaction(BaseClass):
 
 
         # Ask user to choose an account.
+        # TODO: Use choose_x method instead
         print("Choose an account to fund this transaction with.")
         for i in range(len(account_list)):
             print("\t%d)" % (i + 1), account_list[i][0])
@@ -997,6 +993,7 @@ class Transaction(BaseClass):
 
 
         # Ask user to choose a category.
+        # TODO: Use choose_x method instead
         assign_category = True
         if not is_expense or instance.amount == 0:
             # Category is optional.
