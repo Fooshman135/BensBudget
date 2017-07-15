@@ -104,7 +104,7 @@ class BaseClass (metaclass=ABCMeta):
         object_list = cls.database_to_memory()
         if object_list is None:
             return None
-        print("\nWhich {} do you want to select?\n".format(name_lowercase))
+        print("Which {} do you want to select?\n".format(name_lowercase))
         cls.print_rows(
             object_list,
             cls.display_col_names,
@@ -117,14 +117,7 @@ class BaseClass (metaclass=ABCMeta):
             num_lb=0,
             num_ub=len(object_list)
             )
-
-        if choice_number > 0:
-            selected_object = object_list[choice_number - 1]
-            print("\nYou have selected your {}.".format(name_lowercase))
-            press_key_to_continue()
-            return selected_object
-        else:
-            return None
+        return None if choice_number == 0 else object_list[choice_number - 1]
 
     @classmethod
     def display_x(cls, summary_attr=None, summary_attr_name=None):
@@ -296,7 +289,6 @@ class BaseClass (metaclass=ABCMeta):
                     self.__class__.__name__.lower()
                     )
 
-
         if self.__class__.__name__ == 'Category':
             primary_key_name = 'name'
             primary_key_value = self.name
@@ -308,7 +300,6 @@ class BaseClass (metaclass=ABCMeta):
             primary_key_value = self.name
         else:
             raise Exception("Ben Katz - developer error.")
-
 
         # Report the attribute's current value.
         old_attr = getattr(self, attr_str)
@@ -333,7 +324,6 @@ class BaseClass (metaclass=ABCMeta):
                 raise Exception("Ben Katz - developer error.")
         else:
             raise Exception("Ben Katz - developer error.")
-
 
         text = "Your {}'s {} is currently {}.".format(
             self.__class__.__name__.lower(),
@@ -369,6 +359,12 @@ class BaseClass (metaclass=ABCMeta):
 
         elif self.__class__.__name__ == 'Transaction' and attr_str == 'payee':
             titlecase = True
+        elif self.__class__.__name__ == 'Transaction' and attr_str == 'memo':
+            output = "Enter a new {} for this {} (or enter a blank line" \
+                     " to cancel or leave the field empty): ".format(
+                        attr_str,
+                        self.__class__.__name__.lower()
+                        )
         elif self.__class__.__name__ == 'Transaction' and attr_str == 'amount':
             sql = "SELECT balance FROM Accounts WHERE name=?"
             cur.execute(sql, (self.account,))
@@ -508,25 +504,6 @@ class BaseClass (metaclass=ABCMeta):
                         continue
                 break
 
-        # Update the database for this record.
-        sql = "UPDATE {} SET {}=? WHERE {}=?".format(
-            self.table_name,
-            attr_str,
-            primary_key_name
-            )
-        cur.execute(sql, (new_attr, primary_key_value))
-        conn.commit()
-
-        # Also update the database for other records which depend
-        # on this record.
-        if attr_str == primary_key_name:
-            # Need to update other records which depend on this record.
-            sql = "UPDATE Transactions SET {}=? WHERE {}=?".format(
-                self.__class__.__name__.lower(),
-                self.__class__.__name__.lower()
-                )
-            cur.execute(sql, (new_attr, old_attr))
-            conn.commit()
         if self.__class__.__name__ == 'Transaction' and attr_str == "amount":
             # Update associated account balance.
             sql = "UPDATE Accounts SET balance=? WHERE name=?"
@@ -549,15 +526,11 @@ class BaseClass (metaclass=ABCMeta):
                            "to it."
                     print("\n%s" % text)
 
-                    while True:
-                        cat_obj = Category.choose_x()
-
-                        if cat_obj is None:
-                            # User wants to cancel, but they're not allowed to.
-                            print("\nYou can't cancel this decision! Select "
-                                  "a category to assign to this transaction.")
-                            continue
-                        break
+                    cat_obj = Category.choose_x()
+                    if cat_obj is None:
+                        # User wants to cancel.
+                        cur.close()
+                        return
 
                     sql = "UPDATE Transactions SET category=? WHERE uid=?"
                     cur.execute(sql, (cat_obj.name, self.uid))
@@ -565,6 +538,7 @@ class BaseClass (metaclass=ABCMeta):
 
                     self.category = cat_obj.name
 
+                    # Note that, below, old_attr > 0 and new_attr < 0 always.
                     sql = "SELECT value FROM Categories WHERE name=?"
                     cur.execute(sql, (cat_obj.name,))
                     temp = cur.fetchall()[0][0]
@@ -584,7 +558,6 @@ class BaseClass (metaclass=ABCMeta):
                 sql = "UPDATE Categories SET value=? WHERE name=?"
                 cur.execute(sql, (temp + new_attr - old_attr, self.category))
                 conn.commit()
-
 
         elif self.__class__.__name__ == 'Category' and attr_str == "value":
             # Update unassigned_funds.
@@ -608,6 +581,7 @@ class BaseClass (metaclass=ABCMeta):
         elif (self.__class__.__name__ == 'Transaction' and
                 attr_str == "category"):
             if old_attr is None:
+                # Transaction is income, so self.amount is always > 0.
                 Category.unassigned_funds -= self.amount
             else:
                 # Update old category value.
@@ -619,6 +593,7 @@ class BaseClass (metaclass=ABCMeta):
                 conn.commit()
 
             if new_attr is None:
+                # Transaction is income (not expense).
                 Category.unassigned_funds += self.amount
             else:
                 # Update new category value.
@@ -628,6 +603,26 @@ class BaseClass (metaclass=ABCMeta):
                 cur.execute('UPDATE Categories SET value=? WHERE name=?',
                             (temp + self.amount, new_attr))
                 conn.commit()
+
+        # Update the database for this record.
+        sql = "UPDATE {} SET {}=? WHERE {}=?".format(
+            self.table_name,
+            attr_str,
+            primary_key_name
+        )
+        cur.execute(sql, (new_attr, primary_key_value))
+        conn.commit()
+
+        # Also update the database for other records which depend
+        # on this record.
+        if attr_str == primary_key_name:
+            # Need to update other records which depend on this record.
+            sql = "UPDATE Transactions SET {}=? WHERE {}=?".format(
+                self.__class__.__name__.lower(),
+                self.__class__.__name__.lower()
+            )
+            cur.execute(sql, (new_attr, old_attr))
+            conn.commit()
 
         # Update variable in memory
         setattr(self, attr_str, new_attr)
@@ -808,10 +803,14 @@ class Category(BaseClass):
             elif choice == 2:
                 Category.new_category()
             elif choice == 3:
+                print()
                 instance = Category.choose_x()
                 if instance is not None:
                     # Object instance is now in memory.
                     # Present user with category instance menu.
+                    print("\nYou have selected the {} category.".format(
+                            instance.name))
+                    press_key_to_continue()
                     while True:
                         menu_header({
                             "Name:": instance.name,
@@ -881,9 +880,8 @@ class Transaction(BaseClass):
 
         # Verify that at least one account and at least one category exist.
         cur = conn.cursor()
-        cur.execute("SELECT name, balance FROM Accounts")
-        account_list = cur.fetchall()
-        if len(account_list) == 0:
+        cur.execute("SELECT COUNT(*) FROM Accounts")
+        if cur.fetchall()[0][0] == 0:
             # Accounts table is empty. Direct user back to transactions menu.
             output = "You have no accounts. Try again once you've created" \
                      " at least one account and at least one category."
@@ -891,9 +889,8 @@ class Transaction(BaseClass):
             cur.close()
             press_key_to_continue()
             return
-        cur.execute("SELECT name, value FROM Categories")
-        category_list = cur.fetchall()
-        if len(category_list) == 0:
+        cur.execute("SELECT COUNT(*) FROM Categories")
+        if cur.fetchall()[0][0] == 0:
             # Categories table is empty. Direct user back to transactions menu.
             output = "You have no categories. Try again once you've created" \
                      " at least one account and at least one category."
@@ -901,6 +898,8 @@ class Transaction(BaseClass):
             cur.close()
             press_key_to_continue()
             return
+
+
         # Instantiate the Transactions class, to be filled in piece by piece.
         instance = Transaction(None, None, None, None, None, None, None)
 
@@ -916,7 +915,7 @@ class Transaction(BaseClass):
             int,
             num_lb=0,
             num_ub=2
-        )
+            )
         if is_expense == 0:
             # User wants to cancel.
             print("\nCanceling this transaction.")
@@ -939,7 +938,7 @@ class Transaction(BaseClass):
             float,
             num_lb=0,
             empty_string_allowed=True
-        )
+            )
         if amount == '':
             # User wants to cancel.
             print("\nCanceling this transaction.")
@@ -954,46 +953,34 @@ class Transaction(BaseClass):
 
 
         # Ask user to choose an account.
-        # TODO: Use choose_x method instead
         print("Choose an account to fund this transaction with.")
-        for i in range(len(account_list)):
-            print("\t%d)" % (i + 1), account_list[i][0])
-        output = "Enter the number in front of the account you want " \
-                 "to select, or enter 0 to cancel: "
-        account_num = input_validation(
-            output,
-            int,
-            num_lb=0,
-            num_ub=len(account_list)
-            )
-        if account_num == 0:
+        account_choice = Account.choose_x()
+        if account_choice is None:
             # User wants to cancel.
             print("\nCanceling this transaction.")
             cur.close()
             press_key_to_continue()
             return
         else:
-            if abs(instance.amount) > account_list[
-                        account_num- 1][1] and is_expense:
+            if abs(instance.amount) > account_choice.balance and is_expense:
                 output = "\nThe selected account's balance is too low" \
                          " (${:,.2f}). Please add at least ${:,.2f} to the" \
                          " account and then try again.".format(
-                    account_list[account_num- 1][1],
-                    abs(instance.amount) - account_list[account_num- 1][1])
+                            account_choice.balance,
+                            abs(instance.amount) - account_choice.balance,
+                            )
                 print(output)
-                print("\nCanceling this transaction.")
+                print("Canceling this transaction.")
                 cur.close()
                 press_key_to_continue()
                 return
             else:
-                output = "\nAccount selected: {}.".format(
-                    account_list[account_num-1][0])
+                output = "\nAccount selected: {}.".format(account_choice.name)
                 print(output)
-                instance.account = account_list[account_num-1][0]
+                instance.account = account_choice.name
 
 
         # Ask user to choose a category.
-        # TODO: Use choose_x method instead
         assign_category = True
         if not is_expense or instance.amount == 0:
             # Category is optional.
@@ -1011,20 +998,11 @@ class Transaction(BaseClass):
                 int,
                 num_lb=0,
                 num_ub=1
-            )
+                )
         if assign_category:
             print("Assign a category to this transaction.")
-            for i in range(len(category_list)):
-                print("\t%d)" % (i + 1), category_list[i][0])
-            output = "Enter the number in front of the category you want " \
-                     "to select, or enter 0 to cancel: "
-            category_num = input_validation(
-                output,
-                int,
-                num_lb=0,
-                num_ub=len(category_list)
-                )
-            if category_num == 0:
+            category_choice = Category.choose_x()
+            if category_choice is None:
                 # User wants to cancel.
                 print("\nCanceling this transaction.")
                 cur.close()
@@ -1032,9 +1010,9 @@ class Transaction(BaseClass):
                 return
             else:
                 output = "\nCategory selected: {}.".format(
-                    category_list[category_num-1][0])
+                    category_choice.name)
                 print(output)
-                instance.category = category_list[category_num-1][0]
+                instance.category = category_choice.name
         else:
             print()
 
@@ -1118,6 +1096,7 @@ class Transaction(BaseClass):
         else:
             # Since the transaction doesn't deduct funds from any category,
             # it must instead deduct funds from unassigned_funds.
+            # This only happens when transaction is income, not expense.
             Category.unassigned_funds += instance.amount
 
 
@@ -1223,10 +1202,13 @@ class Transaction(BaseClass):
             elif choice == 2:
                 Transaction.new_transaction()
             elif choice == 3:
+                print()
                 instance = Transaction.choose_x()
                 if instance is not None:
                     # Object instance is now in memory.
                     # Present user with transaction instance menu.
+                    print("\nYou have selected your transaction.")
+                    press_key_to_continue()
                     while True:
                         # Display the selected transaction's attributes at the
                         # top of the menu.
@@ -1259,9 +1241,9 @@ class Transaction(BaseClass):
                             # instance.update_transaction_memo()
                             instance.update_attribute('memo')
                         elif choice2 == 7:
-                                confirmation = instance.delete_transaction()
-                                if confirmation:
-                                    break
+                            confirmation = instance.delete_transaction()
+                            if confirmation:
+                                break
                         elif choice2 == 8:
                             break
                     print("\n~~You are now returning to the "
@@ -1284,7 +1266,7 @@ class Transaction(BaseClass):
             amount=attributes[3],
             payee=attributes[4],
             date=attributes[5],
-            memo=attributes[6]
+            memo=attributes[6],
             )
 
 # ____________________________________________________________________________#
@@ -1440,10 +1422,14 @@ class Account(BaseClass):
             elif choice == 2:
                 Account.new_account()
             elif choice == 3:
+                print()
                 instance = Account.choose_x()
                 if instance is not None:
                     # Object instance is now in memory.
                     # Present user with transaction instance menu.
+                    print("\nYou have selected the {} account.".format(
+                            instance.name))
+                    press_key_to_continue()
                     while True:
                         # Display the selected account's attributes at the
                         # top of the menu.
