@@ -36,55 +36,57 @@ from abc import ABCMeta
 CONFIG_DIRECTORY = os.path.expanduser(
     '~/Library/Application Support/Bens Budget Program')
 
-WHICH_BUDGET_MENU_OPTIONS = ["make a new budget,",
-                             "load an existing budget,",
-                             "delete an existing budget,",
-                             "quit the program."
+WHICH_BUDGET_MENU_OPTIONS = ["make a new budget.",
+                             "load an existing budget.",
+                             "delete an existing budget.",
+                             "quit the program.",
                              ]
 
-MAIN_MENU_OPTIONS = ["go to the category menu,",
-                     "go to the transactions menu,",
-                     "go to the accounts menu,",
-                     "choose a different budget or quit the program."
+MAIN_MENU_OPTIONS = ["go to the category menu.",
+                     "go to the transactions menu.",
+                     "go to the accounts menu.",
+                     "choose a different budget or quit the program.",
                      ]
 
-CATEGORY_MENU_OPTIONS = ["see your list of budget categories,",
-                         "add a new category,",
-                         "modify an existing category,",
-                         "return to the main menu."
+CATEGORY_MENU_OPTIONS = ["see your list of budget categories.",
+                         "add a new category.",
+                         "modify an existing category.",
+                         "return to the main menu.",
                          ]
 
-CATEGORY_INSTANCE_OPTIONS = ["edit the category's name,",
-                             "edit the category's value,",
-                             "delete the category,",
-                             "return to the category menu."
+CATEGORY_INSTANCE_OPTIONS = ["edit the category's name.",
+                             "edit the category's value.",
+                             "view all transactions for this category.",
+                             "delete the category.",
+                             "return to the category menu.",
                              ]
 
-ACCOUNT_MENU_OPTIONS = ["see your list of accounts,",
-                        "add a new account,",
-                        "modify an existing account,",
-                        "return to the main menu."
+ACCOUNT_MENU_OPTIONS = ["see your list of accounts.",
+                        "add a new account.",
+                        "modify an existing account.",
+                        "return to the main menu.",
                         ]
 
-ACCOUNT_INSTANCE_OPTIONS = ["edit the account's name,",
-                            "delete the account,",
-                            "return to the account menu."
+ACCOUNT_INSTANCE_OPTIONS = ["edit the account's name.",
+                            "view all transactions for this account.",
+                            "delete the account.",
+                            "return to the account menu.",
                             ]
 
-TRANSACTION_MENU_OPTIONS = ["view your transactions,",
-                            "add a new transaction,",
-                            "modify an existing transaction",
-                            "return to the main menu."
+TRANSACTION_MENU_OPTIONS = ["view your transactions.",
+                            "add a new transaction.",
+                            "modify an existing transaction.",
+                            "return to the main menu.",
                             ]
 
-TRANSACTION_INSTANCE_OPTIONS = ["edit the transaction's account,",
-                                "edit the transaction's category,",
-                                "edit the transaction's amount,",
-                                "edit the transaction's payee,",
-                                "edit the transaction's date,",
-                                "edit the transaction's memo,",
-                                "delete the transaction,",
-                                "return to the transaction menu."
+TRANSACTION_INSTANCE_OPTIONS = ["edit the transaction's account.",
+                                "edit the transaction's category.",
+                                "edit the transaction's amount.",
+                                "edit the transaction's payee.",
+                                "edit the transaction's date.",
+                                "edit the transaction's memo.",
+                                "delete the transaction.",
+                                "return to the transaction menu.",
                                 ]
 
 # ____________________________________________________________________________#
@@ -120,16 +122,21 @@ class BaseClass (metaclass=ABCMeta):
         return None if choice_number == 0 else object_list[choice_number - 1]
 
     @classmethod
-    def display_x(cls, summary_attr=None, summary_attr_name=None):
+    def display_x(
+            cls,
+            where_clause = '',
+            summary_attr=None,
+            summary_attr_name=None
+            ):
 
         # TODO: Use with statement to open and close the cursor.
         # TODO: Fix floating point errors for large numbers. Use "decimal" module?
         # TODO: If categories have negative balances, alert the user.
 
         name_lowercase = cls.__name__.lower()
-        object_list = cls.database_to_memory()
+        object_list = cls.database_to_memory(where_clause)
         if object_list is None:
-            return None
+            return
         print("\nHere is your {} list:\n".format(name_lowercase))
         cls.print_rows(
             object_list,
@@ -143,20 +150,21 @@ class BaseClass (metaclass=ABCMeta):
             concat = minus + "{:,.2f}".format(abs(summary_attr))
             output = "Your {} is currently {}.".format(
                 summary_attr_name,
-                concat
+                concat,
                 )
             print(output)
         press_key_to_continue()
 
     @classmethod
-    def database_to_memory(cls):
+    def database_to_memory(cls, where_clause=''):
         """Queries the entire database table corresponding to the class
         which calls this method, instantiates objects for every record returned
         from the database, and returns all the objects in a list."""
         object_list = []
 
         cur = conn.cursor()
-        cur.execute("SELECT * FROM {}".format(cls.table_name))
+        sql = "SELECT * FROM {} {}".format(cls.table_name, where_clause)
+        cur.execute(sql)
         query_results = cur.fetchall()
 
         if len(query_results) == 0:
@@ -225,7 +233,7 @@ class BaseClass (metaclass=ABCMeta):
             top = top + "{}{:{pad}}".format(
                 " "*gap,
                 col_names[i].title(),
-                pad=max_list[i]
+                pad=max_list[i],
                 )
         top = top.lstrip()
         print("{}{}".format(" "*left_margin, top))
@@ -253,13 +261,13 @@ class BaseClass (metaclass=ABCMeta):
                     output = output + "{}{:>{pad}}".format(
                         " "*gap,
                         concat,
-                        pad=max_list[i]
+                        pad=max_list[i],
                         )
                 else:
                     output = output + "{}{:{pad}}".format(
                         " "*gap,
                         concat,
-                        pad=max_list[i]
+                        pad=max_list[i],
                         )
             output = output.strip()
             if show_nums:
@@ -267,7 +275,7 @@ class BaseClass (metaclass=ABCMeta):
                 print("{:{pad}}{}".format(
                     temp,
                     output,
-                    pad=left_margin)
+                    pad=left_margin),
                     )
                 num += 1
             else:
@@ -328,7 +336,7 @@ class BaseClass (metaclass=ABCMeta):
         text = "Your {}'s {} is currently {}.".format(
             self.__class__.__name__.lower(),
             attr_str,
-            old_value
+            old_value,
             )
         print("\n%s" % text)
 
@@ -363,7 +371,7 @@ class BaseClass (metaclass=ABCMeta):
             output = "Enter a new {} for this {} (or enter a blank line" \
                      " to cancel or leave the field empty): ".format(
                         attr_str,
-                        self.__class__.__name__.lower()
+                        self.__class__.__name__.lower(),
                         )
         elif self.__class__.__name__ == 'Transaction' and attr_str == 'amount':
             sql = "SELECT balance FROM Accounts WHERE name=?"
@@ -386,7 +394,7 @@ class BaseClass (metaclass=ABCMeta):
                         output,
                         int,
                         num_lb=0,
-                        num_ub=2
+                        num_ub=2,
                         )
                     if choice == 0:
                         obj = None
@@ -448,7 +456,7 @@ class BaseClass (metaclass=ABCMeta):
                     num_lb=lower,
                     num_ub=upper,
                     is_titlecased=titlecase,
-                    empty_string_allowed=empty
+                    empty_string_allowed=empty,
                     )
 
                 if new_attr == '':
@@ -464,7 +472,7 @@ class BaseClass (metaclass=ABCMeta):
                             output,
                             int,
                             num_lb=1,
-                            num_ub=2
+                            num_ub=2,
                             )
                         if blank_choice == 1:
                             # Clear the field.
@@ -489,7 +497,7 @@ class BaseClass (metaclass=ABCMeta):
                     # Need to check if input appears elsewhere in the table.
                     sql = "SELECT name FROM {} WHERE {}=?".format(
                         self.table_name,
-                        primary_key_name
+                        primary_key_name,
                         )
                     cur.execute(sql, (new_attr,))
                     check2 = cur.fetchall()
@@ -498,7 +506,7 @@ class BaseClass (metaclass=ABCMeta):
                                " choose a different {}.".format(
                             self.__class__.__name__.lower(),
                             attr_str,
-                            attr_str
+                            attr_str,
                             )
                         print("\n%s" % text)
                         continue
@@ -608,8 +616,8 @@ class BaseClass (metaclass=ABCMeta):
         sql = "UPDATE {} SET {}=? WHERE {}=?".format(
             self.table_name,
             attr_str,
-            primary_key_name
-        )
+            primary_key_name,
+            )
         cur.execute(sql, (new_attr, primary_key_value))
         conn.commit()
 
@@ -619,8 +627,8 @@ class BaseClass (metaclass=ABCMeta):
             # Need to update other records which depend on this record.
             sql = "UPDATE Transactions SET {}=? WHERE {}=?".format(
                 self.__class__.__name__.lower(),
-                self.__class__.__name__.lower()
-            )
+                self.__class__.__name__.lower(),
+                )
             cur.execute(sql, (new_attr, old_attr))
             conn.commit()
 
@@ -642,7 +650,7 @@ class BaseClass (metaclass=ABCMeta):
             self.__class__.__name__.lower(),
             attr_str,
             old_value,
-            new_value
+            new_value,
             )
         print("\n%s" % output)
 
@@ -660,7 +668,7 @@ class Category(BaseClass):
     table_name = "Categories"
     display_col_names = [
         "name",
-        "value"
+        "value",
         ]
 
 
@@ -681,8 +689,8 @@ class Category(BaseClass):
                 "\nWhat do you want to call your new category? "
                 "Enter a blank line to cancel: ",
                 str,
-                empty_string_allowed=True
-            )
+                empty_string_allowed=True,
+                )
 
             if name == '':
                 # User wants to cancel this decision.
@@ -712,7 +720,7 @@ class Category(BaseClass):
                 output,
                 float,
                 num_lb=0,
-                num_ub=cls.unassigned_funds
+                num_ub=cls.unassigned_funds,
                 )
             # value is valid, but may have extra decimal places (beyond 2).
             value = round(value, 2)
@@ -755,7 +763,7 @@ class Category(BaseClass):
                         " those transactions to other categories or delete" \
                          " them, and then try again.".format(
                             temp,
-                            self.name
+                            self.name,
                             )
             print("\n%s" % output)
             cur.close()
@@ -770,8 +778,8 @@ class Category(BaseClass):
             text+"Enter 1 for yes, 0 for no: ",
             int,
             num_lb=0,
-            num_ub=1
-        )
+            num_ub=1,
+            )
         if confirmation == 1:
             # Delete the category.
             Category.unassigned_funds += self.value
@@ -788,7 +796,6 @@ class Category(BaseClass):
         """Provide user with information regarding the category menu then
         direct them to the appropriate functions."""
 
-        # TODO: Within Category_instance_menu, add option to view transactions associated with the selected category.
         # TODO: Within Category_instance_menu, add option to create a new transaction with that category.
 
         print("\n~~You are now in the categories menu.~~")
@@ -797,8 +804,8 @@ class Category(BaseClass):
             choice = recite_menu_options(CATEGORY_MENU_OPTIONS)
             if choice == 1:
                 Category.display_x(
-                    cls.unassigned_funds,
-                    cls.unassigned_funds_name
+                    summary_attr=cls.unassigned_funds,
+                    summary_attr_name=cls.unassigned_funds_name,
                     )
             elif choice == 2:
                 Category.new_category()
@@ -814,7 +821,7 @@ class Category(BaseClass):
                     while True:
                         menu_header({
                             "Name:": instance.name,
-                            "Value:": instance.value
+                            "Value:": instance.value,
                             })
                         choice2 = recite_menu_options(
                             CATEGORY_INSTANCE_OPTIONS)
@@ -823,10 +830,13 @@ class Category(BaseClass):
                         elif choice2 == 2:
                             instance.update_attribute('value')
                         elif choice2 == 3:
+                            Transaction.display_x(
+                                'WHERE category="{}"'.format(instance.name))
+                        elif choice2 == 4:
                             confirmation = instance.delete_category()
                             if confirmation:
                                 break
-                        elif choice2 == 4:
+                        elif choice2 == 5:
                             break
                     print("\n~~You are now returning to the categories"
                           " menu.~~")
@@ -843,7 +853,7 @@ class Category(BaseClass):
 
         return Category(
             name=attributes[0],
-            value=attributes[1]
+            value=attributes[1],
             )
 
 # ____________________________________________________________________________#
@@ -858,7 +868,7 @@ class Transaction(BaseClass):
         "date",
         "account",
         "category",
-        "memo"
+        "memo",
         ]
 
     def __init__(self, uid, account, category, amount, payee, date, memo):
@@ -914,7 +924,7 @@ class Transaction(BaseClass):
             output,
             int,
             num_lb=0,
-            num_ub=2
+            num_ub=2,
             )
         if is_expense == 0:
             # User wants to cancel.
@@ -937,7 +947,7 @@ class Transaction(BaseClass):
             output,
             float,
             num_lb=0,
-            empty_string_allowed=True
+            empty_string_allowed=True,
             )
         if amount == '':
             # User wants to cancel.
@@ -997,7 +1007,7 @@ class Transaction(BaseClass):
                 output,
                 int,
                 num_lb=0,
-                num_ub=1
+                num_ub=1,
                 )
         if assign_category:
             print("Assign a category to this transaction.")
@@ -1024,7 +1034,7 @@ class Transaction(BaseClass):
             output,
             str,
             is_titlecased=True,
-            empty_string_allowed=True
+            empty_string_allowed=True,
             )
         if payee == '':
             # User wants to cancel.
@@ -1059,7 +1069,7 @@ class Transaction(BaseClass):
         memo = input_validation(
             output,
             str,
-            empty_string_allowed=True
+            empty_string_allowed=True,
             )
         if memo != "":
             instance.memo = memo
@@ -1155,7 +1165,7 @@ class Transaction(BaseClass):
                 output,
                 int,
                 num_lb=0,
-                num_ub=1
+                num_ub=1,
                 )
 
         if confirmation:
@@ -1218,27 +1228,21 @@ class Transaction(BaseClass):
                             "Date:": instance.date,
                             "Account:": instance.account,
                             "Category:": instance.category,
-                            "Memo:": instance.memo
+                            "Memo:": instance.memo,
                             })
                         choice2 = recite_menu_options(
                             TRANSACTION_INSTANCE_OPTIONS)
                         if choice2 == 1:
-                            # instance.update_transaction_account()
                             instance.update_attribute('account')
                         elif choice2 == 2:
-                            # instance.update_transaction_category()
                             instance.update_attribute('category')
                         elif choice2 == 3:
-                            # instance.update_transaction_amount()
                             instance.update_attribute('amount')
                         elif choice2 == 4:
-                            # instance.update_transaction_payee()
                             instance.update_attribute('payee')
                         elif choice2 == 5:
-                            # instance.update_transaction_date()
                             instance.update_attribute('date')
                         elif choice2 == 6:
-                            # instance.update_transaction_memo()
                             instance.update_attribute('memo')
                         elif choice2 == 7:
                             confirmation = instance.delete_transaction()
@@ -1279,7 +1283,7 @@ class Account(BaseClass):
     table_name = "Accounts"
     display_col_names = [
         "name",
-        "balance"
+        "balance",
         ]
 
     def __init__(self, name, balance):
@@ -1296,7 +1300,7 @@ class Account(BaseClass):
                 "\nWhat do you want to call your new account?"
                 " Enter a blank line to cancel: ",
                 str,
-                empty_string_allowed=True
+                empty_string_allowed=True,
                 )
 
             if name == '':
@@ -1320,7 +1324,7 @@ class Account(BaseClass):
         balance = input_validation(
             "Please enter a starting account balance (must be non-negative): ",
             float,
-            num_lb=0
+            num_lb=0,
             )
 
         # Balance is valid, but may have extra decimal places (beyond 2).
@@ -1342,7 +1346,7 @@ class Account(BaseClass):
             balance,
             "Starting Balance",
             dt.today(),
-            None
+            None,
             )
         )
         conn.commit()
@@ -1377,7 +1381,7 @@ class Account(BaseClass):
                          " accounts or delete them, and then try" \
                          " again.".format(
                             temp,
-                            self.name
+                            self.name,
                             )
             print("\n%s" % output)
             cur.close()
@@ -1392,7 +1396,7 @@ class Account(BaseClass):
             text + "Enter 1 for yes, 0 for no: ",
             int,
             num_lb=0,
-            num_ub=1
+            num_ub=1,
             )
         if confirmation == 1:
             # Delete the account.
@@ -1416,8 +1420,8 @@ class Account(BaseClass):
             choice = recite_menu_options(ACCOUNT_MENU_OPTIONS)
             if choice == 1:
                 Account.display_x(
-                    cls.total_account_balance,
-                    cls.tot_account_bal_name
+                    summary_attr=cls.total_account_balance,
+                    summary_attr_name=cls.tot_account_bal_name,
                     )
             elif choice == 2:
                 Account.new_account()
@@ -1442,10 +1446,13 @@ class Account(BaseClass):
                         if choice2 == 1:
                             instance.update_attribute('name')
                         elif choice2 == 2:
+                            Transaction.display_x(
+                                'WHERE account="{}"'.format(instance.name))
+                        elif choice2 == 3:
                             confirmation = instance.delete_account()
                             if confirmation:
                                 break
-                        elif choice2 == 3:
+                        elif choice2 == 4:
                             break
                     print("\n~~You are now returning to the account menu.~~")
             elif choice == 4:
@@ -1461,7 +1468,7 @@ class Account(BaseClass):
 
         return Account(
             name=attributes[0],
-            balance=attributes[1]
+            balance=attributes[1],
             )
 
 # ____________________________________________________________________________#
@@ -1543,8 +1550,8 @@ def which_budget(user_budgets):
                     str,
                     str_bad_chars=('.', ':', '/'),
                     str_bad_chars_positions=(0, None, None),
-                    empty_string_allowed=True
-                )
+                    empty_string_allowed=True,
+                    )
 
                 # Now confirm that there isn't an existing budget that
                 # already has that name.
@@ -1563,7 +1570,7 @@ def which_budget(user_budgets):
             # round-trip from Python to sqlite3 database to Python again.
             connection = sqlite3.connect(
                 os.path.join(user_budgets, budget_name + '.db'),
-                detect_types=sqlite3.PARSE_DECLTYPES
+                detect_types=sqlite3.PARSE_DECLTYPES,
                 )
             cur = connection.cursor()
             cur.execute('CREATE TABLE Categories('
@@ -1607,7 +1614,7 @@ def which_budget(user_budgets):
                     " or enter 0 to cancel: ",
                     int,
                     num_lb=0,
-                    num_ub=len(list_of_budgets)
+                    num_ub=len(list_of_budgets),
                 )
 
                 if budget_number > 0:
@@ -1618,7 +1625,7 @@ def which_budget(user_budgets):
                     # to Python again.
                     connection = sqlite3.connect(
                         list_of_budgets[budget_number - 1],
-                        detect_types=sqlite3.PARSE_DECLTYPES
+                        detect_types=sqlite3.PARSE_DECLTYPES,
                         )
                     budget_name = os.path.splitext(os.path.basename(
                         list_of_budgets[budget_number - 1]))[0]
@@ -1643,7 +1650,7 @@ def which_budget(user_budgets):
                     " delete, or enter 0 to cancel: ",
                     int,
                     num_lb=0,
-                    num_ub=len(list_of_budgets)
+                    num_ub=len(list_of_budgets),
                 )
 
                 if budget_number > 0:
@@ -1656,7 +1663,7 @@ def which_budget(user_budgets):
                         output,
                         int,
                         num_lb=0,
-                        num_ub=1
+                        num_ub=1,
                     )
                     if confirmation:
                         # Delete the budget that corresponds to the number
@@ -1686,7 +1693,7 @@ def recite_menu_options(list_of_options):
         "Enter your choice here: ",
         int,
         num_lb=1,
-        num_ub=len(list_of_options)
+        num_ub=len(list_of_options),
     )
 
 # ____________________________________________________________________________#
@@ -1700,10 +1707,8 @@ def input_validation(
         str_bad_chars=None,
         str_bad_chars_positions=None,
         is_titlecased=False,
-        empty_string_allowed=False
+        empty_string_allowed=False,
         ):
-
-    # TODO: Use regexes when input is str, pass regex as argument? Replaces str_bad_chars and str_bad_chars_positions
 
     """
     Receive user input and verify that it's valid before returning it.
@@ -1721,6 +1726,8 @@ def input_validation(
             is acceptable input.
     :return: The user input, once confirmed that it's acceptable.
     """
+
+    # TODO: Use regexes when input is str, pass regex as argument? Replaces str_bad_chars and str_bad_chars_positions
 
     while True:
 
@@ -1756,11 +1763,8 @@ def input_validation(
                     if str_bad_chars[i] in user_input:
                         # Reject input.
                         error_output = "Invalid entry, cannot contain" \
-                                       " {}".format(
-                                        str_bad_chars[i]
-                                        )
+                                       " {}".format(str_bad_chars[i])
                         break
-
                 else:
                     # str_bad_chars[i] is not allowed at the specific location
                     # specified by str_bad_chars_positions[i], but allowed
@@ -1771,7 +1775,7 @@ def input_validation(
                         error_output = "Invalid entry, character at position" \
                                        " {} cannot be '{}'".format(
                                         str_bad_chars_positions[i],
-                                        str_bad_chars[i]
+                                        str_bad_chars[i],
                                         )
                         break
 
@@ -1790,7 +1794,7 @@ def input_validation(
                 error_output = "Invalid entry, must be between {} and" \
                          " {} (inclusive).\n".format(
                             num_lb,
-                            num_ub
+                            num_ub,
                             )
                 print("\n%s" % error_output)
                 continue
@@ -1806,7 +1810,7 @@ def input_validation(
                 error_output = "Invalid entry, must be between {:,.2f} and" \
                          " {:,.2f} (inclusive).\n".format(
                             num_lb,
-                            num_ub
+                            num_ub,
                             )
                 print("\n%s" % error_output)
                 continue
@@ -1835,7 +1839,6 @@ def input_validation(
                 continue
         else:
             raise Exception("Ben Katz - developer error.")
-
 
         # user_input is good to go.
         break
@@ -1901,19 +1904,3 @@ def exit_program():
 
 if __name__ == "__main__":
     main()
-
-"""
-Here are ideas of next steps and features:
--Implement some sense of time. Consider making the time frame variable, based on user input.
--Allow users to create their own subsets of categories (distinct from the idea of super-categories).
-    -Allow users to see spending patterns/trends in just that subset.
--Use regular expressions to check user input (and make sure it's valid).
--Implement config files
-    config files save user preferences ("configurations")
-    Module: configparser
-    ~/Library/Application Support/Bens Budget Program
--How restricted should the user be regarding entering in transaction amounts?
-    -Answer: Let the user decide! Make it a configuration thing.
-        -Add a settings/configurations/properties/preferences menu.
-    -For now, default to letting categories go negative, but not accounts.
-"""
