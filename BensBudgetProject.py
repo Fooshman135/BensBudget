@@ -4,37 +4,39 @@
 Ben Katz coding sample.
 
 This program was written and designed entirely by Ben Katz. It was created as
-a personal project, to showcase knowledge of the Python and SQL languages.
-
-It is designed to be executed by a Python 3.6 interpreter (although earlier
-versions of Python 3.x might work too) on Mac OS X. It has not been tested on
-other operating systems.
-
-This program will create directories and save files at the following location
-(and nowhere else):
-    ~/Library/Application Support/Bens Budget Program
-Please note that the program will exit if it comes across any operating system
-errors or file system errors.
+a personal project, to showcase knowledge of Python (with some SQL thrown in).
 
 This program is a command line based, personal finance budgeting app. It is a
 work-in-progress, but its current development stage is sufficient for
 demonstration purposes.
 
+It is designed to be executed by a Python 3.6 or 2.7 interpreter on Mac OS X.
+It may work with other versions of Python but it has not been tested with them.
+It has not been tested on other operating systems.
+
+This program has no dependencies, and should work out-of-the-box.
+
+This program will create directories and save files at the following location
+(and nowhere else):
+    ~/Library/Application Support/Ben's Budget Program
+Please note that the program will exit if it comes across any operating system
+errors or file system errors.
+
 Ben Katz can be contacted at BenCKatz@gmail.com.
 Thank you for your consideration.
 """
 
+from __future__ import print_function   # For users running Python 2.X
 import os
 import sqlite3
 import glob
 from datetime import date as dt
 import re
-from abc import ABCMeta
 
 # Bash uses ~ to mean the home directory, but Python doesn't know that.
 # That's why we use os.path.expanduser() in the following command.
 CONFIG_DIRECTORY = os.path.expanduser(
-    '~/Library/Application Support/Bens Budget Program')
+    '~/Library/Application Support/Ben\'s Budget Program')
 
 WHICH_BUDGET_MENU_OPTIONS = ["make a new budget.",
                              "load an existing budget.",
@@ -92,7 +94,7 @@ TRANSACTION_INSTANCE_OPTIONS = ["edit the transaction's account.",
 # ____________________________________________________________________________#
 
 
-class BaseClass (metaclass=ABCMeta):
+class BaseClass:
 
     @classmethod
     def choose_x(cls):
@@ -110,7 +112,8 @@ class BaseClass (metaclass=ABCMeta):
         cls.print_rows(
             object_list,
             cls.display_col_names,
-            show_nums=True)
+            show_nums=True,
+            )
         print()
         choice_number = input_validation(
             "Enter the number in front of the {} you wish to "
@@ -427,7 +430,7 @@ class BaseClass (metaclass=ABCMeta):
                 # Make sure the account the user selects won't become negative.
                 while True:
                     obj = Account.choose_x()
-                    if obj is None:
+                    if obj is None or obj.name == old_attr:
                         break
                     if obj.balance < abs(self.amount) and self.amount < 0:
                         # The new account's balance is too low.
@@ -852,7 +855,7 @@ class Category(BaseClass):
         order of the attributes in the code below."""
 
         return Category(
-            name=attributes[0],
+            name=str(attributes[0]),    # str() is added for Python 2.X users
             value=attributes[1],
             )
 
@@ -1263,14 +1266,18 @@ class Transaction(BaseClass):
         inputs (represented by the index subscript) must match up with the
         order of the attributes in the code below."""
 
+        # The below two lines are added for Python 2.X users.
+        temp_c = attributes[2] if attributes[2] is None else str(attributes[2])
+        temp_m = attributes[6] if attributes[6] is None else str(attributes[6])
+
         return Transaction(
             uid=attributes[0],
-            account=attributes[1],
-            category=attributes[2],
+            account=str(attributes[1]),   # str() is added for Python 2.X users
+            category=temp_c,
             amount=attributes[3],
-            payee=attributes[4],
+            payee=str(attributes[4]),     # str() is added for Python 2.X users
             date=attributes[5],
-            memo=attributes[6],
+            memo=temp_m,
             )
 
 # ____________________________________________________________________________#
@@ -1467,7 +1474,7 @@ class Account(BaseClass):
         order of the attributes in the code below."""
 
         return Account(
-            name=attributes[0],
+            name=str(attributes[0]),    # str() is added for Python 2.X users
             balance=attributes[1],
             )
 
@@ -1732,8 +1739,11 @@ def input_validation(
     while True:
 
         error_output = None
+        try:
+            user_input = raw_input(prompt).strip()  # Python 2.X
+        except NameError:
+            user_input = input(prompt).strip()      # Python 3.X
 
-        user_input = input(prompt).strip()
         # user_input is a string.
 
         # First check for empty string.
@@ -1743,7 +1753,7 @@ def input_validation(
                 # User input is good to go.
                 break
             else:
-                print("\nInvalid entry, please try again.\n")
+                print("\nInvalid entry, please try again.")
                 continue
 
         if input_type is str:
@@ -1787,12 +1797,12 @@ def input_validation(
             try:
                 user_input = int(user_input)
             except ValueError:
-                print("\nInvalid entry, please try again.\n")
+                print("\nInvalid entry, please try again.")
                 continue
             # Now check to make sure user_input is in range.
             if (user_input < num_lb) or (user_input > num_ub):
                 error_output = "Invalid entry, must be between {} and" \
-                         " {} (inclusive).\n".format(
+                         " {} (inclusive).".format(
                             num_lb,
                             num_ub,
                             )
@@ -1803,12 +1813,12 @@ def input_validation(
             try:
                 user_input = float(user_input)
             except ValueError:
-                print("\nInvalid entry, please try again.\n")
+                print("\nInvalid entry, please try again.")
                 continue
             # Now check to make sure user_input is in range.
             if (user_input < num_lb) or (user_input > num_ub):
                 error_output = "Invalid entry, must be between {:,.2f} and" \
-                         " {:,.2f} (inclusive).\n".format(
+                         " {:,.2f} (inclusive).".format(
                             num_lb,
                             num_ub,
                             )
@@ -1837,6 +1847,12 @@ def input_validation(
             except ValueError:
                 print("\nInvalid entry, not a real date.")
                 continue
+            try:
+                user_input.strftime("%m/%d/%Y")
+            except ValueError:
+                # User is running Python 2.x and date precedes 01/01/1900.
+                print("\nInvalid entry, cannot precede 01/01/1900.")
+                continue
         else:
             raise Exception("Ben Katz - developer error.")
 
@@ -1850,7 +1866,10 @@ def input_validation(
 
 def press_key_to_continue():
     """Prompts the user to hit a button before displaying the next menu."""
-    input("Press Enter to continue... ")
+    try:
+        raw_input("Press Enter to continue... ")    # Python 2.X
+    except NameError:
+        input("Press Enter to continue... ")        # Python 3.X
     print()     # Prints a blank line.
 
 # ____________________________________________________________________________#
