@@ -52,7 +52,7 @@ MAIN_MENU_OPTIONS = ["go to the category menu.",
 
 CATEGORY_MENU_OPTIONS = ["see your list of budget categories.",
                          "add a new category.",
-                         "modify an existing category.",
+                         "select an existing category.",
                          "return to the main menu.",
                          ]
 
@@ -65,7 +65,7 @@ CATEGORY_INSTANCE_OPTIONS = ["edit the category's name.",
 
 ACCOUNT_MENU_OPTIONS = ["see your list of accounts.",
                         "add a new account.",
-                        "modify an existing account.",
+                        "select an existing account.",
                         "return to the main menu.",
                         ]
 
@@ -77,7 +77,7 @@ ACCOUNT_INSTANCE_OPTIONS = ["edit the account's name.",
 
 TRANSACTION_MENU_OPTIONS = ["view your transactions.",
                             "add a new transaction.",
-                            "modify an existing transaction.",
+                            "select an existing transaction.",
                             "return to the main menu.",
                             ]
 
@@ -90,6 +90,9 @@ TRANSACTION_INSTANCE_OPTIONS = ["edit the transaction's account.",
                                 "delete the transaction.",
                                 "return to the transaction menu.",
                                 ]
+
+# TODO: Add budget properties class that has conn variable, and has methods to change budget name,
+# TODO set gap and left_margin, and allow categories and/or accounts to go negative.
 
 # ____________________________________________________________________________#
 
@@ -297,7 +300,7 @@ class BaseClass:
         output = "Enter a new {} for this {} (or enter a blank line" \
                  " to cancel): ".format(
                     attr_str,
-                    self.__class__.__name__.lower()
+                    self.__class__.__name__.lower(),
                     )
 
         if self.__class__.__name__ == 'Category':
@@ -316,17 +319,17 @@ class BaseClass:
         old_attr = getattr(self, attr_str)
         new_type = type(old_attr)
         if type(old_attr) == str:
-            old_value = old_attr
+            old_disp = old_attr
         elif type(old_attr) == int:
-            old_value = old_attr
+            old_disp = old_attr
             empty = False
         elif type(old_attr) == float:
             minus = "-$" if old_attr < 0 else "$"
-            old_value = "{}{:,.2f}".format(minus, abs(old_attr))
+            old_disp = "{}{:,.2f}".format(minus, abs(old_attr))
         elif type(old_attr) == dt:
-            old_value = old_attr.strftime('%m/%d/%Y')
+            old_disp = old_attr.strftime('%m/%d/%Y')
         elif old_attr is None:
-            old_value = "not set"
+            old_disp = "not set"
             if attr_str == 'memo':
                 new_type = str
             elif attr_str == 'category':
@@ -339,7 +342,7 @@ class BaseClass:
         text = "Your {}'s {} is currently {}.".format(
             self.__class__.__name__.lower(),
             attr_str,
-            old_value,
+            old_disp,
             )
         print("\n%s" % text)
 
@@ -517,24 +520,22 @@ class BaseClass:
 
         if self.__class__.__name__ == 'Transaction' and attr_str == "amount":
             # Update associated account balance.
-            sql = "UPDATE Accounts SET balance=? WHERE name=?"
-            cur.execute(sql, (trans_account_bal + new_attr - old_attr,
-                              self.account))
+            sql = "UPDATE Accounts SET balance=balance+? WHERE name=?"
+            cur.execute(sql, (new_attr - old_attr, self.account))
             conn.commit()
             Account.total_account_balance += (new_attr - old_attr)
 
             # Update associated category value (if there is one).
             sql = "SELECT value FROM Categories WHERE name=?"
             cur.execute(sql, (self.category,))
-            temp = cur.fetchall()
-            if len(temp) == 0:
+            if len(cur.fetchall()) == 0:
                 # There is no associated Category for this transaction.
                 if new_attr < 0:
                     # Transaction was switched from income to expense, and
                     # it has no category assigned to it.
-                    text = "Since you changed this transaction from income " \
-                           "to an expense, it now needs a category assigned " \
-                           "to it."
+                    text = "Since you are changing this transaction from" \
+                           " income to an expense, it now needs a category" \
+                           " assigned to it."
                     print("\n%s" % text)
 
                     cat_obj = Category.choose_x()
@@ -543,31 +544,27 @@ class BaseClass:
                         cur.close()
                         return
 
+                    # Assign category to transaction in database and memory.
                     sql = "UPDATE Transactions SET category=? WHERE uid=?"
-                    cur.execute(sql, (cat_obj.name, self.uid))
+                    cur.execute(sql, (cat_obj.name, primary_key_value))
                     conn.commit()
+                    setattr(self, "category", cat_obj.name)
 
-                    self.category = cat_obj.name
-
-                    # Note that, below, old_attr > 0 and new_attr < 0 always.
-                    sql = "SELECT value FROM Categories WHERE name=?"
-                    cur.execute(sql, (cat_obj.name,))
-                    temp = cur.fetchall()[0][0]
-                    sql = 'UPDATE Categories SET value=? WHERE name=?'
-                    cur.execute(sql, (temp + new_attr, cat_obj.name))
+                    # Update category value in database.
+                    sql = 'UPDATE Categories SET value=value+? WHERE name=?'
+                    cur.execute(sql, (new_attr, cat_obj.name))
                     conn.commit()
 
                     # Update unassigned_funds.
                     Category.unassigned_funds -= old_attr
                 else:
+                    # Transaction remains an income transaction.
                     # Update unassigned_funds.
                     Category.unassigned_funds += (new_attr - old_attr)
-
             else:
                 # Update associated category value.
-                temp = temp[0][0]
-                sql = "UPDATE Categories SET value=? WHERE name=?"
-                cur.execute(sql, (temp + new_attr - old_attr, self.category))
+                sql = "UPDATE Categories SET value=value+? WHERE name=?"
+                cur.execute(sql, (new_attr - old_attr, self.category))
                 conn.commit()
 
         elif self.__class__.__name__ == 'Category' and attr_str == "value":
@@ -577,16 +574,13 @@ class BaseClass:
         elif (self.__class__.__name__ == 'Transaction' and
                 attr_str == "account"):
             # Update old account balance.
-            cur.execute('UPDATE Accounts SET balance=? WHERE name=?',
-                        (old_account_bal - self.amount, self.account))
+            cur.execute('UPDATE Accounts SET balance=balance-? WHERE name=?',
+                        (self.amount, old_attr))
             conn.commit()
 
             # Update new account balance.
-            cur.execute("SELECT balance FROM Accounts WHERE name=?",
-                        (new_attr,))
-            temp = cur.fetchall()[0][0]
-            cur.execute('UPDATE Accounts SET balance=? WHERE name=?',
-                        (temp + self.amount, new_attr))
+            cur.execute('UPDATE Accounts SET balance=balance+? WHERE name=?',
+                        (self.amount, new_attr))
             conn.commit()
 
         elif (self.__class__.__name__ == 'Transaction' and
@@ -596,11 +590,8 @@ class BaseClass:
                 Category.unassigned_funds -= self.amount
             else:
                 # Update old category value.
-                cur.execute("SELECT value FROM Categories WHERE name=?",
-                            (self.category,))
-                temp = cur.fetchall()[0][0]
-                cur.execute('UPDATE Categories SET value=? WHERE name=?',
-                            (temp - self.amount, self.category))
+                cur.execute('UPDATE Categories SET value=value-? WHERE name=?',
+                            (self.amount, old_attr))
                 conn.commit()
 
             if new_attr is None:
@@ -608,11 +599,8 @@ class BaseClass:
                 Category.unassigned_funds += self.amount
             else:
                 # Update new category value.
-                cur.execute("SELECT value FROM Categories WHERE name=?",
-                            (new_attr,))
-                temp = cur.fetchall()[0][0]
-                cur.execute('UPDATE Categories SET value=? WHERE name=?',
-                            (temp + self.amount, new_attr))
+                cur.execute('UPDATE Categories SET value=value+? WHERE name=?',
+                            (self.amount, new_attr))
                 conn.commit()
 
         # Update the database for this record.
@@ -641,19 +629,19 @@ class BaseClass:
         # Inform the user of the result.
         if type(new_attr) == float:
             minus = "-$" if new_attr < 0 else "$"
-            new_value = "{}{:,.2f}".format(minus, abs(new_attr))
+            new_disp = "{}{:,.2f}".format(minus, abs(new_attr))
         elif type(new_attr) == dt:
-            new_value = new_attr.strftime('%m/%d/%Y')
+            new_disp = new_attr.strftime('%m/%d/%Y')
         elif new_attr is None:
-            new_value = 'not set'
+            new_disp = 'not set'
         else:
-            new_value = new_attr
+            new_disp = new_attr
 
         output = "You have changed the {} {} from {} to {}.".format(
             self.__class__.__name__.lower(),
             attr_str,
-            old_value,
-            new_value,
+            old_disp,
+            new_disp,
             )
         print("\n%s" % output)
 
