@@ -674,35 +674,33 @@ class Category(BaseClass):
         transactions can make the value negative."""
 
         cur = conn.cursor()
+        print()
         while True:
-
             name = input_validation(
-                "\nWhat do you want to call your new category? "
+                "What do you want to call your new category? "
                 "Enter a blank line to cancel: ",
                 str,
                 empty_string_allowed=True,
                 )
-
             if name == '':
                 # User wants to cancel this decision.
                 cur.close()
                 return
-
-            cur.execute("SELECT name FROM Categories WHERE name=?", (name,))
-            check = cur.fetchall()
-            if not check:
+            sql = "SELECT COUNT(*) FROM Categories WHERE name=?"
+            cur.execute(sql, (name,))
+            check = cur.fetchone()[0]
+            if check == 0:
                 # The name which the user entered is not already
                 # in the Categories table.
                 break
             else:
                 print("\nA category already exists with that name. "
-                      "Please choose a different name.\n")
+                      "Please choose a different name.")
                 continue
 
         # Category name has been approved, so now ask if user would like
         # to assign a value.
-        print(
-            "\nOkay! You added a new category called %s to your list!" % name)
+        print("\nOkay! You added a new category called %s." % name)
         if cls.unassigned_funds > 0:
             output = "There is ${:,.2f} available to be assigned to " \
                      "categories. How much would you like to assign to {} " \
@@ -882,7 +880,7 @@ class Transaction(BaseClass):
         # Verify that at least one account and at least one category exist.
         cur = conn.cursor()
         cur.execute("SELECT COUNT(*) FROM Accounts")
-        if cur.fetchall()[0][0] == 0:
+        if cur.fetchone()[0] == 0:
             # Accounts table is empty. Direct user back to transactions menu.
             output = "You have no accounts. Try again once you've created" \
                      " at least one account and at least one category."
@@ -891,7 +889,7 @@ class Transaction(BaseClass):
             press_key_to_continue()
             return
         cur.execute("SELECT COUNT(*) FROM Categories")
-        if cur.fetchall()[0][0] == 0:
+        if cur.fetchone()[0] == 0:
             # Categories table is empty. Direct user back to transactions menu.
             output = "You have no categories. Try again once you've created" \
                      " at least one account and at least one category."
@@ -1068,8 +1066,8 @@ class Transaction(BaseClass):
 
         # Now assign a UID to the transaction.
         cur.execute("SELECT MAX(uid) FROM Transactions")
-        uid_max = cur.fetchall()
-        instance.uid = 1 if uid_max[0][0] is None else uid_max[0][0] + 1
+        uid_max = cur.fetchone()[0]
+        instance.uid = 1 if uid_max is None else uid_max + 1
 
 
         # It's finally time to add this record to the database.
@@ -1088,11 +1086,8 @@ class Transaction(BaseClass):
 
         # Update the category's value (or unassigned_funds value).
         if instance.category is not None:
-            cur.execute("SELECT value FROM Categories WHERE name=?",
-                        (instance.category,))
-            temp = cur.fetchall()[0][0]
-            cur.execute("UPDATE Categories SET value=? WHERE name=?",
-                        (temp + instance.amount, instance.category))
+            cur.execute("UPDATE Categories SET value=value+? WHERE name=?",
+                        (instance.amount, instance.category))
             conn.commit()
         else:
             # Since the transaction doesn't deduct funds from any category,
@@ -1102,11 +1097,8 @@ class Transaction(BaseClass):
 
 
         # Update the account's value, as well as total_account_balance.
-        cur.execute("SELECT balance FROM Accounts WHERE name=?",
-                    (instance.account,))
-        temp = cur.fetchall()[0][0]
-        cur.execute('UPDATE Accounts SET balance=? WHERE name=?',
-                    (temp + instance.amount, instance.account))
+        cur.execute('UPDATE Accounts SET balance=balance+? WHERE name=?',
+                    (instance.amount, instance.account))
         conn.commit()
         Account.total_account_balance += instance.amount
 
@@ -1123,15 +1115,15 @@ class Transaction(BaseClass):
         cur = conn.cursor()
         cur.execute("SELECT balance FROM Accounts WHERE name=?",
                     (self.account,))
-        temp = cur.fetchall()[0][0]
-        if temp < self.amount:
+        account_bal = cur.fetchall()[0][0]
+        if account_bal < self.amount:
             # Account balance would become negative, not allowed.
             output = "Deleting this transaction would cause the {}" \
                      " account's balance to become negative. Try again" \
                      " once at least ${:,.2f} is added to the account's" \
                      " current balance.".format(
                         self.account,
-                        abs(temp - self.amount)
+                        self.amount - account_bal,
                         )
             print("\n%s" % output)
             press_key_to_continue()
@@ -1142,8 +1134,7 @@ class Transaction(BaseClass):
             output = "Deleting this transaction would cause the Unassigned" \
                      " Funds to become negative. Try again once at least" \
                      " ${:,.2f}  is added to the Unassigned Funds.".format(
-                        abs(Category.unassigned_funds - self.amount)
-                        )
+                        self.amount - Category.unassigned_funds)
             print("\n%s" % output)
             press_key_to_continue()
             confirmation = 0
@@ -1161,8 +1152,8 @@ class Transaction(BaseClass):
 
         if confirmation:
             # Delete the transaction.
-            cur.execute("UPDATE Accounts SET balance=? WHERE name=?",
-                        (temp - self.amount, self.account))
+            cur.execute("UPDATE Accounts SET balance=balance-? WHERE name=?",
+                        (self.amount, self.account))
             conn.commit()
             Account.total_account_balance -= self.amount
 
@@ -1171,15 +1162,11 @@ class Transaction(BaseClass):
                 Category.unassigned_funds -= self.amount
             else:
                 # Funds were originally taken from self.category.
-                cur.execute("SELECT value FROM Categories WHERE name=?",
-                            (self.category,))
-                temp = cur.fetchall()[0][0]
-                cur.execute("UPDATE Categories SET value=? WHERE name=?",
-                            (temp - self.amount, self.category))
+                cur.execute("UPDATE Categories SET value=value-? WHERE name=?",
+                            (self.amount, self.category))
                 conn.commit()
 
-            cur.execute("DELETE FROM Transactions WHERE uid=?",
-                        (self.uid,))
+            cur.execute("DELETE FROM Transactions WHERE uid=?", (self.uid,))
             conn.commit()
             print("\nYou have successfully deleted this transaction.")
             press_key_to_continue()
@@ -1290,32 +1277,33 @@ class Account(BaseClass):
         """Prompt the user for a name and a number, then create an account
          with that name and balance."""
 
+        cur = conn.cursor()
+        print()
         while True:
             name = input_validation(
-                "\nWhat do you want to call your new account?"
+                "What do you want to call your new account?"
                 " Enter a blank line to cancel: ",
                 str,
                 empty_string_allowed=True,
                 )
-
             if name == '':
                 # User wants to cancel this decision.
+                cur.close()
                 return
-            cur = conn.cursor()
-            cur.execute("SELECT name FROM Accounts WHERE name=?", (name,))
-            check = cur.fetchall()
-            # Returns an empty list if the user-supplied name doesn't
-            # appear in the Accounts table
-            if not check:
-                # The name which the user entered is not in the Accounts table.
+            cur.execute("SELECT COUNT(*) FROM Accounts WHERE name=?", (name,))
+            check = cur.fetchone()[0]
+            if check == 0:
+                # The name which the user entered is not already
+                # in the Accounts table.
                 break
             else:
                 print("\nAn account already exists with that name. "
-                      "Please choose a different name.\n")
+                      "Please choose a different name.")
                 continue
 
         # Now that the name is accepted, prompt the user to add
         # a starting account balance.
+        print("\nOkay! You added a new account called %s." % name)
         balance = input_validation(
             "Please enter a starting account balance (must be non-negative): ",
             float,
@@ -1324,6 +1312,8 @@ class Account(BaseClass):
 
         # Balance is valid, but may have extra decimal places (beyond 2).
         balance = round(balance, 2)
+        print("\nStarting account balance for {} is ${:,.2f}.".format(
+            name, balance))
 
         # Account name and balance have been approved, so add them to the
         # accounts table in the database.
@@ -1332,8 +1322,8 @@ class Account(BaseClass):
 
         # Create a transaction for the starting balance.
         cur.execute("SELECT MAX(uid) FROM Transactions")
-        uid_max = cur.fetchall()
-        temp_uid = 1 if uid_max[0][0] is None else uid_max[0][0] + 1
+        uid_max = cur.fetchone()[0]
+        temp_uid = 1 if uid_max is None else uid_max + 1
         cur.execute("INSERT INTO Transactions Values(?,?,?,?,?,?,?)", (
             temp_uid,
             name,
@@ -1350,8 +1340,6 @@ class Account(BaseClass):
         # Finally, update the class attribute for total account balance.
         cls.total_account_balance += balance
         Category.unassigned_funds += balance
-
-        print("\nOkay! You added a new account called %s to your list!" % name)
         press_key_to_continue()
 
     def delete_account(self):
@@ -1495,14 +1483,14 @@ def main():
         # Now that a budget is selected, update the total account balance.
         cur = conn.cursor()
         cur.execute("SELECT SUM(balance) FROM Accounts")
-        Account.total_account_balance = cur.fetchall()[0][0]
+        Account.total_account_balance = cur.fetchone()[0]
         # A brand new budget has no data, so cur.fetchall returns None.
         if Account.total_account_balance is None:
             Account.total_account_balance = 0
 
         # Also update the unassigned funds.
         cur.execute("SELECT SUM(value) FROM Categories")
-        temp = cur.fetchall()[0][0]
+        temp = cur.fetchone()[0]
         # A brand new budget has no data, so cur.fetchall returns None.
         if temp is None:
             temp = 0
