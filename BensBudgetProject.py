@@ -536,8 +536,8 @@ class Category(BaseClass):
         Category.unassigned_funds -= (new_value - self.value)
 
         # Update the database for this record.
-        sql = "UPDATE Categories SET value=? WHERE value=?"
-        cur.execute(sql, (new_value, self.value))
+        sql = "UPDATE Categories SET value=? WHERE name=?"
+        cur.execute(sql, (new_value, self.name))
         conn.commit()
 
         # Inform the user of the result.
@@ -1006,8 +1006,8 @@ class Transaction(BaseClass):
         conn.commit()
 
         # Update the database for this record.
-        sql = "UPDATE Transactions SET account=? WHERE account=?"
-        cur.execute(sql, (new_account, self.account))
+        sql = "UPDATE Transactions SET account=? WHERE uid=?"
+        cur.execute(sql, (new_account, self.uid))
         conn.commit()
 
         # Inform the user of the result.
