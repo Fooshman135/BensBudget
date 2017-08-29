@@ -26,6 +26,8 @@ Ben Katz can be contacted at BenCKatz@gmail.com.
 Thank you for your consideration.
 """
 
+# This comment should only exist in the new branch!
+
 from __future__ import print_function   # For users running Python 2.X
 import os
 import sqlite3
