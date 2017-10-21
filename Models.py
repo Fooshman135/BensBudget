@@ -27,6 +27,9 @@ class Category:
         pass
 
 
+# ____________________________________________________________________________#
+
+
 class Transaction:
 
     table_name = "Transactions"
@@ -66,6 +69,9 @@ class Transaction:
     @classmethod
     def menu_for_transactions(self):
         pass
+
+
+# ____________________________________________________________________________#
 
 
 class Account:

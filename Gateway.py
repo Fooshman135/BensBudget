@@ -1,11 +1,14 @@
 import Globals
 import sqlite3
 import os
+import LL_Services
 
 
+# ____________________________________________________________________________#
 def create_database_with_tables(name):
     """Create a new .db file within USER_BUDGETS directory and name it
-    as the input. Also create tables."""
+    as the input. Also create tables.
+    Returns a sqlite3.connection object."""
 
     # The 'detect_types' line allows the DATE type to survive the
     # round-trip from Python to sqlite3 database to Python again.
@@ -33,18 +36,20 @@ def create_database_with_tables(name):
     )
     cur.close()
     connection.commit()
-    return connection
+    connection.close()
 
 
+# ____________________________________________________________________________#
+def establish_db_connection(path_to_db):
+    # The 'detect_types' line allows the DATE type to
+    # survive the round-trip from Python to sqlite3 database
+    # to Python again.
+    Globals.conn = sqlite3.connect(
+        path_to_db,
+        detect_types=sqlite3.PARSE_DECLTYPES,
+    )
+    Globals.SELECTED_BUDGET_NAME = LL_Services.full_filepath_to_just_name(path_to_db)
 
-
-def query_entire_table(table_name):
-    cur = Globals.conn.cursor()
-    sql = "SELECT * FROM {}".format(table_name)
-    cur.execute(sql)
-    query_results = cur.fetchall()
-    cur.close()
-    return query_results
 
 
 

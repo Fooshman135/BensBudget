@@ -3,11 +3,11 @@ import Views
 import HL_Services
 
 
-
+# ____________________________________________________________________________#
 def main():
 
     # Note that, in the below dictionary values, the parentheses are omitted
-    #  intentionally.
+    # intentionally.
     WHICH_BUDGET_MENU_OPTIONS = {
         "make a new budget.": HL_Services.create_budget_and_load_it,
         "load an existing budget.": HL_Services.load_budget,
@@ -27,7 +27,6 @@ def main():
 
 
 
-
-
+# ____________________________________________________________________________#
 if __name__ == "__main__":
     main()

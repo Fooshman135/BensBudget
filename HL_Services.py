@@ -6,8 +6,7 @@ import Models
 
 
 
-
-
+# ____________________________________________________________________________#
 def recite_menu_options(list_of_options):
     """Present user with a series of options and make them choose one."""
 
@@ -27,14 +26,14 @@ def recite_menu_options(list_of_options):
         # If bad, print error and loop. Else, break.
         if valid == False:
             # Input was bad.
-            Views.display_error_message("\nInvalid entry, please try again.")
+            Views.display_error_message()
             continue
         break
 
     return list_of_options[int(choice_num)-1]
 
 
-
+# ____________________________________________________________________________#
 def new_budget():
     """The user wants to create a brand new budget."""
 
@@ -70,27 +69,25 @@ def new_budget():
         break
 
     # Proceed with setting up new database and connecting to it.
-    connection = Gateway.create_database_with_tables(budget_name)
+    Gateway.create_database_with_tables(budget_name)
     Views.display_output("\nGreat! You have created a brand new budget "
         "called %s." % budget_name)
     Views.press_key_to_continue()
-    return connection, budget_name
+    return budget_name
 
 
 
-
+# ____________________________________________________________________________#
 def create_budget_and_load_it():
-    try:
-        (Globals.conn, Globals.SELECTED_BUDGET_NAME) = new_budget()
-    except TypeError:
-        # User cancelled instead of creating a new budget.
-        pass
-    else:
+
+    budget_name = new_budget()
+    if budget_name is not None:
+        # User created a budget, now load it.
+        Gateway.establish_db_connection(LL_Services.just_name_to_full_filepath(budget_name))
         main_menu()
 
 
-
-
+# ____________________________________________________________________________#
 def main_menu():
 
     MAIN_MENU_OPTIONS = {
@@ -118,16 +115,48 @@ def main_menu():
 
 
 
-
+# ____________________________________________________________________________#
 def load_budget():
-    pass
+
+    list_of_budgets = LL_Services.get_all_budgets(Globals.USER_BUDGETS)
+    if len(list_of_budgets) == 0:
+        Views.display_output("\nThere are no existing budgets. You should make a new one!")
+        Views.press_key_to_continue()
+        return
+    Views.display_output("\nWhich budget would you like to load?\n")
+
+    name_list = [LL_Services.full_filepath_to_just_name(budget) for budget in list_of_budgets]
+    Views.print_rows(name_list, ['Budgets'], show_nums=True)
+    Views.display_output("")
+
+    while True:
+        budget_number = Views.display_input( "Enter the number in front of the budget you wish to load, or enter 0 to cancel: ")
+        proceed = LL_Services.int_validate(
+            budget_number,
+            num_lb=0,
+            num_ub=len(list_of_budgets),
+        )
+        if proceed == False:
+            Views.display_error_message()
+            continue
+        break
+
+    budget_number = int(budget_number)
+    if budget_number > 0:
+        # Load the budget that corresponds to the number the user entered.
+        Gateway.establish_db_connection(list_of_budgets[budget_number - 1])
+        Views.display_output("\nBudget loaded: %s" % Globals.SELECTED_BUDGET_NAME)
+        main_menu()
 
 
+
+
+# ____________________________________________________________________________#
 def delete_budget():
     pass
 
 
-
+# ____________________________________________________________________________#
 def exit_program():
     """Exit the program gracefully (with exit code 0)."""
 

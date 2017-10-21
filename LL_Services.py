@@ -1,12 +1,11 @@
 from datetime import date as dt
 import Views
-import Models
 import Globals
-import Gateway
 import os
 import re
+import glob
 
-
+# ____________________________________________________________________________#
 def create_user_directory():
     """Create a directory to store user data for this app, unless one
     already exists."""
@@ -18,7 +17,7 @@ def create_user_directory():
 
 
 
-
+# ____________________________________________________________________________#
 def menu_header(header_dict):
     """Print a menu header showing the items within header_list. The keys
     of the dictionary are expected to be strings, and the values are expected
@@ -51,7 +50,7 @@ def menu_header(header_dict):
 
 
 
-
+# ____________________________________________________________________________#
 def float_validate(user_input, num_lb=float('-inf'), num_ub=float('inf')):
     """Confirms that input is a float (or int) and is in the correct range.
      Returns True if both tests pass, and False otherwise.
@@ -76,7 +75,7 @@ def float_validate(user_input, num_lb=float('-inf'), num_ub=float('inf')):
     return True
 
 
-
+# ____________________________________________________________________________#
 def int_validate(user_input, num_lb=float('-inf'), num_ub=float('inf')):
     """Confirms that input is an integer and is in the correct range.
      Returns True if both tests pass, and False otherwise.
@@ -97,7 +96,7 @@ def int_validate(user_input, num_lb=float('-inf'), num_ub=float('inf')):
     return True
 
 
-
+# ____________________________________________________________________________#
 def date_validate(user_input):
     """Confirm that input is in MM/DD/YYYY format, and is a real date."""
 
@@ -127,20 +126,20 @@ def date_validate(user_input):
     return True
 
 
-
+# ____________________________________________________________________________#
 def check_for_existing_budget(name):
     """Checks directory of existing budgets to see if one already exists with
     the name the user has provided.
     Input name is of type str.
     Return True if no existing budget has that name, False otherwise."""
 
-    if os.path.isfile(os.path.join(Globals.USER_BUDGETS, name + '.db')):
+    if os.path.isfile(just_name_to_full_filepath(name)):
         # A budget does exist with that name.
         return False
     return True
 
 
-
+# ____________________________________________________________________________#
 def is_string_valid_filename(name):
     """Checks to see if input can be used as a Unix filename.
     Returns True is it can be used, False otherwise."""
@@ -159,43 +158,22 @@ def is_string_valid_filename(name):
     return True
 
 
+# ____________________________________________________________________________#
+def get_all_budgets(directory):
+    """Returns a list of all .db files located at the input directory.
+    Input is of type str, output is of type list."""
+    return glob.glob("%s/*.db" % directory)
+
+
+# ____________________________________________________________________________#
+def full_filepath_to_just_name(full_filepath):
+    return os.path.splitext(os.path.basename(full_filepath))[0]
+
+
+# ____________________________________________________________________________#
+def just_name_to_full_filepath(name):
+    return os.path.join(Globals.USER_BUDGETS, name + '.db')
 
 
 
-
-
-
-
-
-def database_to_memory(class_name, where_clause=''):
-    """Queries the entire database table corresponding to the class
-    which calls this method, instantiates objects for every record returned
-    from the database, and returns all the objects in a list."""
-    object_list = []
-    xxx = getattr(Models, class_name)
-
-    query_results = Gateway.query_entire_table(xxx.table_name)
-
-    # cur = Globals.conn.cursor()
-    # sql = "SELECT * FROM {} {}".format(xxx.table_name, where_clause)
-    # cur.execute(sql)
-    # query_results = cur.fetchall()
-    # cur.close()
-
-    if len(query_results) == 0:
-        return None
-
-    for i in query_results:
-        object_list.append(xxx.instantiate(i))
-    return object_list
-
-
-###############################################################################
-# The below code is temporary testing, should be deleted when done debugging!
-
-# Globals.conn = sqlite3.connect(
-#     "/Users/Benjamin/Documents/PythonPrograms/BudgetProject/BudgetRepo/Unit Testing files/test_database_to_memory.db",
-#     detect_types=sqlite3.PARSE_DECLTYPES,
-# )
-# database_to_memory('Category')
 
