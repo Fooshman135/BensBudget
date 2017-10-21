@@ -3,6 +3,7 @@ import LL_Services
 import Gateway
 import Globals
 import Models
+import os
 
 
 
@@ -110,11 +111,6 @@ def main_menu():
     Globals.conn.close()
 
 
-
-
-
-
-
 # ____________________________________________________________________________#
 def load_budget():
 
@@ -146,14 +142,63 @@ def load_budget():
         # Load the budget that corresponds to the number the user entered.
         Gateway.establish_db_connection(list_of_budgets[budget_number - 1])
         Views.display_output("\nBudget loaded: %s" % Globals.SELECTED_BUDGET_NAME)
+        Views.press_key_to_continue()
         main_menu()
-
-
 
 
 # ____________________________________________________________________________#
 def delete_budget():
-    pass
+
+    list_of_budgets = LL_Services.get_all_budgets(Globals.USER_BUDGETS)
+    if len(list_of_budgets) == 0:
+        Views.display_output("\nThere are no existing budgets. You should make a new one!")
+        Views.press_key_to_continue()
+        return
+    Views.display_output("\nWhich budget would you like to delete?\n")
+
+    name_list = [LL_Services.full_filepath_to_just_name(budget) for budget in list_of_budgets]
+    Views.print_rows(name_list, ['Budgets'], show_nums=True)
+    Views.display_output("")
+
+    while True:
+        text = "Enter the number in front of the budget you wish to delete," \
+               " or enter 0 to cancel: "
+        budget_number = Views.display_input(text)
+        proceed = LL_Services.int_validate(
+            budget_number,
+            num_lb=0,
+            num_ub=len(list_of_budgets),
+        )
+        if proceed == False:
+            Views.display_error_message()
+            continue
+        break
+
+    budget_number = int(budget_number)
+    if budget_number > 0:
+        # Ask the user to confirm their choice.
+        budget_name = name_list[budget_number - 1]
+        prompt = "Are you sure you want to delete {}? Press 1" \
+                 " for 'Yes', 0 for 'No': ".format(budget_name)
+        while True:
+            confirmation = Views.display_input(prompt)
+            valid = LL_Services.int_validate(
+                confirmation,
+                num_lb=0,
+                num_ub=1,
+            )
+            if valid == False:
+                Views.display_error_message()
+                continue
+            break
+
+        if int(confirmation):
+            # Delete the budget that corresponds to the number
+            # the user entered.
+            # TODO does the os.remove statement belong in LL_Services?
+            os.remove(list_of_budgets[budget_number - 1])
+            Views.display_output("\nBudget deleted: {}".format(budget_name))
+            Views.press_key_to_continue()
 
 
 # ____________________________________________________________________________#
