@@ -16,23 +16,50 @@ def recite_menu_options(list_of_options):
     for i in range(len(list_of_options)):
         Views.display_output("Press %d to %s" % (i + 1, list_of_options[i]))
 
-    while True:
-
-        # Request user input
-        choice_num = Views.display_input("Enter your choice here: ")
-
-        # int_validation
-        valid = LL_Services.int_validate(choice_num, 1, len(list_of_options))
-
-        # If bad, print error and loop. Else, break.
-        if valid == False:
-            # Input was bad.
-            Views.display_error_message()
-            continue
-        break
+    choice_num = receive_input_and_validate_int(
+        "Enter your choice here: ",
+        1,
+        len(list_of_options)
+    )
 
     return list_of_options[int(choice_num)-1]
 
+
+# ____________________________________________________________________________#
+def receive_input_and_validate_int(prompt, num_lb=float('-inf'),
+                                   num_ub=float('inf')):
+    while True:
+        # Request user input
+        choice_num = Views.display_input(prompt)
+        # int_validation
+        valid = LL_Services.int_validate(choice_num, num_lb, num_ub)
+        # If bad, print error and loop. Else, break.
+        if valid == False:
+            # Input was bad.
+            output = "\nInvalid entry, must be an integer between {} " \
+                     "and {} (inclusive).".format(num_lb, num_ub)
+            Views.display_error_message(output)
+            continue
+        break
+    return choice_num
+
+# ____________________________________________________________________________#
+def receive_input_and_validate_float(prompt, num_lb=float('-inf'),
+                                   num_ub=float('inf')):
+    while True:
+        # Request user input
+        choice_num = Views.display_input(prompt)
+        # float_validation
+        valid = LL_Services.float_validate(choice_num, num_lb, num_ub)
+        # If bad, print error and loop. Else, break.
+        if valid == False:
+            # Input was bad.
+            output = "\nInvalid entry, must be an number between {} " \
+                     "and {} (inclusive).".format(num_lb, num_ub)
+            Views.display_error_message(output)
+            continue
+        break
+    return choice_num
 
 # ____________________________________________________________________________#
 def new_budget():
@@ -75,7 +102,6 @@ def new_budget():
         "called %s." % budget_name)
     Views.press_key_to_continue()
     return budget_name
-
 
 
 # ____________________________________________________________________________#
@@ -125,18 +151,13 @@ def load_budget():
     Views.print_rows(name_list, ['Budgets'], show_nums=True)
     Views.display_output("")
 
-    while True:
-        budget_number = Views.display_input( "Enter the number in front of the budget you wish to load, or enter 0 to cancel: ")
-        proceed = LL_Services.int_validate(
-            budget_number,
-            num_lb=0,
-            num_ub=len(list_of_budgets),
-        )
-        if proceed == False:
-            Views.display_error_message()
-            continue
-        break
 
+    budget_number = receive_input_and_validate_int(
+         "Enter the number in front of the budget you wish to load, "
+         "or enter 0 to cancel: ",
+        0,
+        len(list_of_budgets)
+    )
     budget_number = int(budget_number)
     if budget_number > 0:
         # Load the budget that corresponds to the number the user entered.
@@ -160,37 +181,20 @@ def delete_budget():
     Views.print_rows(name_list, ['Budgets'], show_nums=True)
     Views.display_output("")
 
-    while True:
-        text = "Enter the number in front of the budget you wish to delete," \
-               " or enter 0 to cancel: "
-        budget_number = Views.display_input(text)
-        proceed = LL_Services.int_validate(
-            budget_number,
-            num_lb=0,
-            num_ub=len(list_of_budgets),
-        )
-        if proceed == False:
-            Views.display_error_message()
-            continue
-        break
-
+    budget_number = receive_input_and_validate_int(
+         "Enter the number in front of the budget you wish to delete,"
+         " or enter 0 to cancel: ",
+        0,
+        len(list_of_budgets)
+    )
     budget_number = int(budget_number)
     if budget_number > 0:
         # Ask the user to confirm their choice.
         budget_name = name_list[budget_number - 1]
         prompt = "Are you sure you want to delete {}? Press 1" \
                  " for 'Yes', 0 for 'No': ".format(budget_name)
-        while True:
-            confirmation = Views.display_input(prompt)
-            valid = LL_Services.int_validate(
-                confirmation,
-                num_lb=0,
-                num_ub=1,
-            )
-            if valid == False:
-                Views.display_error_message()
-                continue
-            break
+
+        confirmation = receive_input_and_validate_int(prompt, 0, 1)
 
         if int(confirmation):
             # Delete the budget that corresponds to the number

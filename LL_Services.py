@@ -134,7 +134,7 @@ def check_for_existing_budget(name):
     Return True if no existing budget has that name, False otherwise."""
 
     if os.path.isfile(just_name_to_full_filepath(name)):
-        # A budget does exist with that name.
+        # A budget already exists with that name.
         return False
     return True
 

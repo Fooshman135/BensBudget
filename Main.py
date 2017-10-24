@@ -22,11 +22,6 @@ def main():
         choice = HL_Services.recite_menu_options(list(WHICH_BUDGET_MENU_OPTIONS.keys()))
         WHICH_BUDGET_MENU_OPTIONS[choice]()
 
-
-
-
-
-
 # ____________________________________________________________________________#
 if __name__ == "__main__":
     main()
