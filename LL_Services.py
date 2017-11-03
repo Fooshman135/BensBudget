@@ -6,15 +6,19 @@ import re
 import glob
 
 # ____________________________________________________________________________#
-def create_user_directory():
+def create_directory(directory_with_path):
     """Create a directory to store user data for this app, unless one
     already exists."""
 
-    # All files affiliated with this program will be located at the path
-    # stored in CONFIG_DIRECTORY.
-    if not os.path.exists(Globals.USER_BUDGETS):
-        os.makedirs(Globals.USER_BUDGETS)
+    if not os.path.exists(directory_with_path):
+        os.makedirs(directory_with_path)
 
+
+# ____________________________________________________________________________#
+def delete_directory(directory_with_path):
+    """Delete an existing directory (if it exists)."""
+
+    os.remove(directory_with_path)
 
 
 # ____________________________________________________________________________#
@@ -46,8 +50,6 @@ def menu_header(header_dict):
     Views.display_output("-" * len(output))
     Views.display_output(output)
     Views.display_output("-" * len(output))
-
-
 
 
 # ____________________________________________________________________________#

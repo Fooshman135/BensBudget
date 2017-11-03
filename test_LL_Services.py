@@ -84,7 +84,7 @@ class Test_LL_Services(unittest.TestCase):
         self.assertFalse(result)
 
         # Case: User enters a string that isn't in MM/DD/YYYY format.
-        result = LL_Services.date_validate('pi/zz/a!')
+        result = LL_Services.date_validate('Be/nj/amin')
         self.assertFalse(result)
 
 

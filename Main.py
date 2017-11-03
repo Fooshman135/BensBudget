@@ -1,6 +1,7 @@
 import LL_Services
 import Views
 import HL_Services
+import Globals
 
 
 # ____________________________________________________________________________#
@@ -15,11 +16,11 @@ def main():
         "quit the program.": HL_Services.exit_program,
         }
 
-    LL_Services.create_user_directory()
+    LL_Services.create_directory(Globals.USER_BUDGETS)
     Views.display_output("\nWelcome to Ben's Budget Program!")
     while True:
         LL_Services.menu_header({"BUDGET SELECTION MENU:": ""})
-        choice = HL_Services.recite_menu_options(list(WHICH_BUDGET_MENU_OPTIONS.keys()))
+        choice = HL_Services.recite_menu_options_and_get_selection(list(WHICH_BUDGET_MENU_OPTIONS.keys()))
         WHICH_BUDGET_MENU_OPTIONS[choice]()
 
 # ____________________________________________________________________________#

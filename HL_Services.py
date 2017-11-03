@@ -3,12 +3,10 @@ import LL_Services
 import Gateway
 import Globals
 import Models
-import os
-
 
 
 # ____________________________________________________________________________#
-def recite_menu_options(list_of_options):
+def recite_menu_options_and_get_selection(list_of_options):
     """Present user with a series of options and make them choose one."""
 
 
@@ -126,7 +124,7 @@ def main_menu():
 
     while True:
         LL_Services.menu_header({"MAIN MENU:": Globals.SELECTED_BUDGET_NAME})
-        choice = recite_menu_options(list(MAIN_MENU_OPTIONS.keys()))
+        choice = recite_menu_options_and_get_selection(list(MAIN_MENU_OPTIONS.keys()))
         next = MAIN_MENU_OPTIONS[choice]()
         if next == False:
             # User wants to go up one level.
@@ -199,8 +197,7 @@ def delete_budget():
         if int(confirmation):
             # Delete the budget that corresponds to the number
             # the user entered.
-            # TODO does the os.remove statement belong in LL_Services?
-            os.remove(list_of_budgets[budget_number - 1])
+            LL_Services.delete_directory(list_of_budgets[budget_number - 1])
             Views.display_output("\nBudget deleted: {}".format(budget_name))
             Views.press_key_to_continue()
 

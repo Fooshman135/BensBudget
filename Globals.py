@@ -3,6 +3,8 @@ import os
 
 # GLOBAL CONSTANTS ============================================================
 
+# All files affiliated with this program will be located at the path
+# stored in CONFIG_DIRECTORY.
 CONFIG_DIRECTORY = os.path.expanduser(
     '~/Library/Application Support/Ben\'s Budget Program')
 
