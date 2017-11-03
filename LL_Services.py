@@ -144,15 +144,17 @@ def is_string_valid_filename(name):
     """Checks to see if input can be used as a Unix filename.
     Returns True is it can be used, False otherwise."""
 
-    regex1 = '^[.].*$'      # Matches if string contains '.' as the first char.
-    regex2 = '^.*:+.*$'     # Matches if string contains ':' anywhere.
-    regex3 = '^.*/+.*$'     # Matches if string contains '/' anywhere.
+    regex1 = '^[.]'     # Matches if string contains '.' as the first char.
+    regex2 = ':+'       # Matches if string contains ':' anywhere.
+    regex3 = '/+'       # Matches if string contains '/' anywhere.
+    regex4 = '^$'       # Matches if string is the empty string.
 
     match1 = re.search(regex1, name)
     match2 = re.search(regex2, name)
     match3 = re.search(regex3, name)
+    match4 = re.search(regex4, name)
 
-    if match1 or match2 or match3:
+    if match1 or match2 or match3 or match4:
         # name matches with at least one of the regexs above - bad!
         return False
     return True
@@ -173,6 +175,48 @@ def full_filepath_to_just_name(full_filepath):
 # ____________________________________________________________________________#
 def just_name_to_full_filepath(name):
     return os.path.join(Globals.USER_BUDGETS, name + '.db')
+
+# ____________________________________________________________________________#
+def find_max_of_each_obj_attr(table):
+    '''
+
+    :param table: A list of object instances. Each row of the table
+    corresponds to a single object, and each column corresponds to an object
+    attribute. Note that every object in this list are from the same class.
+
+    :return: A dictionary whose keys are the attribute name (strings) and
+    whose values are the corresponding maximum width of each column (ints).
+
+    '''
+
+    # Initialize max_dict
+    max_dict = {}
+    try:
+        for key in table[0].__dict__:
+            max_dict[key] = 0
+    except IndexError:
+        # table is an empty list.
+        pass
+    else:
+        # Search for maximum values.
+        for obj in table:
+            for att_key, att_value in obj.__dict__.items():
+                if type(att_value) == str or type(att_value) == int:
+                    compare = str(att_value)
+                elif type(att_value) == float:
+                    minus = "-$" if att_value < 0 else "$"
+                    compare = minus + "{:,.2f}".format(abs(att_value))
+                elif type(att_value) == dt:
+                    compare = "xx/xx/xxxx"
+                elif att_value is None:
+                    continue
+                else:
+                    raise Exception("Ben Katz - developer error.")
+
+                if max_dict[att_key] < len(compare):
+                    max_dict[att_key] = len(compare)
+    return max_dict
+
 
 
 

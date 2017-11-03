@@ -148,7 +148,7 @@ def load_budget():
     Views.display_output("\nWhich budget would you like to load?\n")
 
     name_list = [LL_Services.full_filepath_to_just_name(budget) for budget in list_of_budgets]
-    Views.print_rows(name_list, ['Budgets'], show_nums=True)
+    Views.print_list(name_list, show_nums=True)
     Views.display_output("")
 
 
@@ -178,7 +178,7 @@ def delete_budget():
     Views.display_output("\nWhich budget would you like to delete?\n")
 
     name_list = [LL_Services.full_filepath_to_just_name(budget) for budget in list_of_budgets]
-    Views.print_rows(name_list, ['Budgets'], show_nums=True)
+    Views.print_list(name_list, show_nums=True)
     Views.display_output("")
 
     budget_number = receive_input_and_validate_int(

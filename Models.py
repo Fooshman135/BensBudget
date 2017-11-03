@@ -24,6 +24,9 @@ class Category:
 
     @classmethod
     def menu_for_categories(self):
+        """Provide user with information regarding the category menu then
+        direct them to the appropriate functions."""
+
         pass
 
 

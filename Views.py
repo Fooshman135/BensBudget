@@ -1,4 +1,5 @@
 import Globals
+import LL_Services
 
 # ____________________________________________________________________________#
 def display_output(text):
@@ -70,7 +71,6 @@ def print_rows(table, col_names, show_nums=False):
      incrementing integers in front of each row (to assist user selection).
      """
 
-    max_list = []
     top = ""
     num = 1
 
@@ -79,39 +79,19 @@ def print_rows(table, col_names, show_nums=False):
     left_margin = 5
     gap = 6
 
-    # TODO Make a list comprehension?
-    for column in col_names:
-        max_list.append(len(column))
 
     # Calculate maximum lengths for each column for formatting purposes.
-    for obj in table:
-        for i in range(len(col_names)):
-            try:
-                att = getattr(obj, col_names[i])
-            except AttributeError:
-                att = obj
-            if type(att) == str or type(att) == int:
-                compare = str(att)
-            elif type(att) == float:
-                minus = "-$" if att < 0 else "$"
-                compare = minus + "{:,.2f}".format(abs(att))
-            elif type(att) == dt:
-                compare = "xx/xx/xxxx"
-            elif att is None:
-                continue
-            else:
-                raise Exception("Ben Katz - developer error.")
-
-            if max_list[i] < len(compare):
-                max_list[i] = len(compare)
-
-    # Print top row and dividing line.
-    for i in range(len(col_names)):
-        top = top + "{}{:{pad}}".format(
+    max_dict = LL_Services.find_max_of_each_obj_attr(table)
+    for name in col_names:
+        if len(name) > max_dict[name]:
+            max_dict[name] = len(name)
+        # Print top row and dividing line.
+        top += "{}{:{pad}}".format(
             " "*gap,
-            col_names[i].title(),
-            pad=max_list[i],
+            name.title(),
+            pad=max_dict[name],
         )
+
     top = top.lstrip()
     print("{}{}".format(" "*left_margin, top))
     print("{}{}".format(" "*left_margin, "-"*len(top)))
@@ -119,11 +99,8 @@ def print_rows(table, col_names, show_nums=False):
     # Now print all the other rows.
     for obj in table:
         output = ""
-        for i in range(len(col_names)):
-            try:
-                att = getattr(obj, col_names[i])
-            except AttributeError:
-                att = obj
+        for name in col_names:
+            att = getattr(obj, name)
             right_justified = False
             if type(att) == str or type(att) == int:
                 concat = str(att)
@@ -141,25 +118,47 @@ def print_rows(table, col_names, show_nums=False):
                 output = output + "{}{:>{pad}}".format(
                     " "*gap,
                     concat,
-                    pad=max_list[i],
+                    pad=max_dict[name],
                 )
             else:
                 output = output + "{}{:{pad}}".format(
                     " "*gap,
                     concat,
-                    pad=max_list[i],
+                    pad=max_dict[name],
                 )
         output = output.strip()
-        if show_nums:
-            temp = str(num) + ")"
-            print("{:{pad}}{}".format(
-                temp,
-                output,
-                pad=left_margin),
-            )
-            num += 1
-        else:
-            print("{}{}".format(" "*left_margin, output))
+
+        temp = str(num) + ")" if show_nums else ""
+        print("{:{pad}}{}".format(
+            temp,
+            output,
+            pad=left_margin),
+        )
+        num += 1
+
+
+# ____________________________________________________________________________#
+def print_list(str_list, show_nums=False):
+    """Receives a list of strings and prints them each on their own line.
+
+    :param str_list: A list containing only strings, each of which needs to
+    be printed on its own line.
+    :param show_nums: A flag that determines whether a number should be shown
+    in front of each string.
+    :return: Nothing.
+    """
+
+    left_margin = 5
+    num = 1
+
+    for string in str_list:
+        temp = str(num) + ")" if show_nums else ""
+        print("{:{pad}}{}".format(
+            temp,
+            string,
+            pad=left_margin),
+        )
+        num += 1
 
 
 

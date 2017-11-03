@@ -41,6 +41,12 @@ def create_database_with_tables(name):
 
 # ____________________________________________________________________________#
 def establish_db_connection(path_to_db):
+    """Receives path to .db file as input and sets sqlite3.connect() to it.
+    Updates the two relevant global variables.
+
+    :param path_to_db: The path to the .db file (type: string).
+    :return: Nothing.
+    """
     # The 'detect_types' line allows the DATE type to
     # survive the round-trip from Python to sqlite3 database
     # to Python again.
@@ -48,7 +54,8 @@ def establish_db_connection(path_to_db):
         path_to_db,
         detect_types=sqlite3.PARSE_DECLTYPES,
     )
-    Globals.SELECTED_BUDGET_NAME = LL_Services.full_filepath_to_just_name(path_to_db)
+    Globals.SELECTED_BUDGET_NAME = LL_Services.full_filepath_to_just_name(
+        path_to_db)
 
 
 
