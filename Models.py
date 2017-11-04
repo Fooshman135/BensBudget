@@ -1,6 +1,20 @@
+import Views
+import LL_Services
+import HL_Services
 
 
-class Category:
+class BaseClass:
+
+    @classmethod
+    def display_all_objects(cls):
+        pass
+
+    @classmethod
+    def choose_object(cls):
+        pass
+
+
+class Category(BaseClass):
 
     table_name = "Categories"
 
@@ -23,17 +37,41 @@ class Category:
             )
 
     @classmethod
-    def menu_for_categories(self):
+    def new_category(cls):
+        pass
+
+
+    @classmethod
+    def menu_for_categories(cls):
         """Provide user with information regarding the category menu then
         direct them to the appropriate functions."""
 
-        pass
+        CATEGORY_MENU_OPTIONS = {
+            "see your list of budget categories.": cls.display_all_objects,
+            "add a new category.": cls.new_category,
+            "select an existing category.": cls.choose_object,
+            "return to the main menu.": lambda: False,
+        }
+
+        Views.display_output("\n~~You are now in the categories menu.~~")
+
+        while True:
+            LL_Services.menu_header({"CATEGORIES MENU:": ""})
+            choice = HL_Services.recite_menu_options_and_get_selection(
+                list(CATEGORY_MENU_OPTIONS.keys())
+            )
+            next = CATEGORY_MENU_OPTIONS[choice]()
+            if next == False:
+                # User wants to go up one level.
+                break
+            Views.display_output(
+                "\n~~You are now returning to the categories menu.~~")
 
 
 # ____________________________________________________________________________#
 
 
-class Transaction:
+class Transaction(BaseClass):
 
     table_name = "Transactions"
 
@@ -70,14 +108,14 @@ class Transaction:
             )
 
     @classmethod
-    def menu_for_transactions(self):
+    def menu_for_transactions(cls):
         pass
 
 
 # ____________________________________________________________________________#
 
 
-class Account:
+class Account(BaseClass):
 
     table_name = "Accounts"
 
@@ -101,6 +139,6 @@ class Account:
 
 
     @classmethod
-    def menu_for_accounts(self):
+    def menu_for_accounts(cls):
         pass
 
