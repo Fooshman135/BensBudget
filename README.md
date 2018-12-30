@@ -13,4 +13,4 @@ This program will create directories and save files at the following location (a
 
 Please note that the program will exit if it comes across any operating system errors or file system errors.
 
-Ben Katz can be contacted at BenCKatz@gmail.com. Thank you for your consideration.
+Ben Katz can be contacted at BenCKatz@gmail.com.
